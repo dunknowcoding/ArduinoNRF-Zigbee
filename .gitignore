@@ -1,0 +1,11 @@
+# build artifacts
+*.o
+*.lst
+*.rel
+*.map
+*.mem
+*.asm
+*.sym
+*.lk
+.build/
+build/

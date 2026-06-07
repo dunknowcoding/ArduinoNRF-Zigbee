@@ -1,0 +1,31 @@
+#######################################
+# Syntax Coloring Map for ArduinoNRF-Zigbee
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+CC2530Radio	KEYWORD1
+IEEE802154Radio	KEYWORD1
+CC2530RxCallback	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+ping	KEYWORD2
+firmwareVersion	KEYWORD2
+setChannel	KEYWORD2
+channel	KEYWORD2
+setPromiscuous	KEYWORD2
+send	KEYWORD2
+onReceive	KEYWORD2
+poll	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+kMaxPayload	LITERAL1
