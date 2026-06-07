@@ -9,7 +9,8 @@
       ProMicro TX (D0) --> CC2530 P0.2 (RX)
       ProMicro RX (D1) <-- CC2530 P0.3 (TX)
       3V3 --> VCC          GND --> GND
-  Also tie CC2530 P2.0 (CFG1) and the SPI CS pads as described in docs/WIRING.md.
+  P2.0 (CFG1) is NOT used by this firmware - leave it as-is. (Grounding it is
+  harmless and is only required if you later flash TI Z-Stack; see docs/WIRING.md.)
 
   Open the Serial Monitor (USB) at 115200 to read the report.
 */

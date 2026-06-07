@@ -40,7 +40,10 @@ The architecture is built to grow to more modules and a future full‑Zigbee
 ## Quick start
 
 1. **Wire it up** — debug pins (D8/D9/D10) and UART pins (D0/D1). See
-   [docs/WIRING.md](docs/WIRING.md). 3.3 V only.
+   [docs/WIRING.md](docs/WIRING.md). 3.3 V only. **P2.0 (CFG1) is not used by this
+   library's firmware** (it's a TI Z-Stack-only strap) — leave it floating or tie
+   it to GND, either works. Grounding it is recommended only to future-proof for
+   a later Z-Stack flash.
 2. **Flash the module firmware once** — open *Examples ▸ ArduinoNRF-Zigbee ▸
    **CC2530_FlashFirmware*** and upload. It uses the built‑in CC‑Debugger; details
    in [docs/FLASHING.md](docs/FLASHING.md).
