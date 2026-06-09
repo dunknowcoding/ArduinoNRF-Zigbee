@@ -48,6 +48,10 @@ example. Any free GPIOs work — just match them in the sketch.)
 D8/D9/D10 (debug) and D0/D1 (UART) are different pins, so **leave both sets
 connected** — flash once, then the runtime examples just work.
 
+The ProMicro silk-screen labels are used here: **D0 is Serial1 TX** and **D1 is
+Serial1 RX** in the ArduinoNRF ProMicro variant. Verified runtime direction:
+`D0 -> CC2530 P0.2 (RX)` and `D1 <- CC2530 P0.3 (TX)`.
+
 ## Important notes
 
 - **P2.0 (CFG1):** the SDCC transceiver firmware in this library configures its

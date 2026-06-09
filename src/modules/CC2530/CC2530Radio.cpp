@@ -83,12 +83,14 @@ void CC2530Radio::feed(uint8_t b) {
 }
 
 bool CC2530Radio::waitResp(uint8_t cmd, uint32_t timeoutMs) {
+  respReady_ = false;
   uint32_t t0 = millis();
   while (millis() - t0 < timeoutMs) {
     while (serial_->available()) {
       feed((uint8_t)serial_->read());
       if (respReady_ && respCmd_ == cmd) { respReady_ = false; return true; }
     }
+    yield();
   }
   return false;
 }
@@ -97,7 +99,22 @@ bool CC2530Radio::begin(uint8_t channel, uint32_t baud) {
   serial_->begin(baud);
   delay(50);
   while (serial_->available()) serial_->read();  // drain boot announce/noise
-  if (!ping()) return false;
+
+  // The nRF host may reset/re-enumerate while the CC2530 keeps running. During
+  // that window the UART line can leave the CC2530 firmware's simple frame
+  // parser mid-packet. Send enough zero bytes to finish or reject any partial
+  // frame before the first real command.
+  for (uint8_t i = 0; i < 140; ++i) serial_->write((uint8_t)0x00);
+  serial_->flush();
+  delay(5);
+  while (serial_->available()) serial_->read();
+
+  bool alive = false;
+  for (uint8_t attempt = 0; attempt < 3 && !alive; ++attempt) {
+    alive = ping();
+    if (!alive) delay(20);
+  }
+  if (!alive) return false;
   setPromiscuous(true);
   return setChannel(channel);
 }

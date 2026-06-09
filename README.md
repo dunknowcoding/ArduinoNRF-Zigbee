@@ -56,6 +56,12 @@ alongside the ArduinoNRF core.
    - **CC2530_Sniffer** — promiscuous 802.15.4 packet sniffer
    - **CC2530_Link** — a two‑node radio link (flash onto two setups)
 
+> Board layout note: some nice!nano-compatible bootloaders report
+> `SoftDevice: not found` in `INFO_UF2.TXT`. For those boards, select the
+> ArduinoNRF no-SoftDevice bootloader option (`bootloader=promicroserialnosd`) so
+> the sketch is linked at `0x1000`. A SoftDevice layout can upload successfully
+> but never start.
+
 ```cpp
 #include <CC2530Radio.h>
 CC2530Radio radio;                 // uses Serial1 (D0/D1)
@@ -86,6 +92,32 @@ void loop() {
 `send()` carries **raw 802.15.4** payloads — perfect for CC2530↔CC2530 links and
 sniffing. Talking to real Zigbee devices needs a proper MAC header (and, for full
 Zigbee networking, the future Z‑Stack backend).
+
+`begin()` also resynchronizes the CC2530 firmware's framed UART parser before
+the first ping. This matters after host uploads/resets because the CC2530 may
+keep running while the nRF resets, leaving the module mid-frame.
+
+## Verified behavior
+
+Hardware verified with two ArduinoNRF ProMicro nRF52840 boards, each wired to a
+CC2530 module:
+
+- `CC2530_FlashFirmware` detects `0xA5xx`, flashes the SDCC transceiver, and
+  verifies read-back.
+- `CC2530_Info` reports firmware `v0.1` and repeated `ping -> PONG`.
+- `CC2530_Link` on two boards shows `TX "hello N" ok` and reciprocal
+  `RX (... dBm): hello N` frames on channel 11.
+- Because the examples use promiscuous receive mode, unrelated 802.15.4 traffic
+  on the channel can appear as noisy frames; the `hello N` payloads are the link
+  confirmation.
+
+## Current stack boundary
+
+NiusZigbee currently implements a raw IEEE 802.15.4 CC2530 backend, not a full
+Zigbee PRO stack. Missing full-stack pieces include NWK/APS/ZDO, coordinator /
+router / end-device join flows, ZCL endpoints and clusters, binding/groups,
+reporting, Trust Center behavior, install codes, and Zigbee security. A future
+ZNP / Z-Stack backend can live beside the raw driver.
 
 ## Extending to new modules
 

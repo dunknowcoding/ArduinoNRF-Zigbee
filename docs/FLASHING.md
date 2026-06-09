@@ -26,6 +26,25 @@ the CC2530's DMA engine (read-back verified).
    this small firmware is near-instant.)
 5. Done. Load **CC2530_Info** (or Sniffer/Link) and use the module over UART.
 
+## After flashing: runtime check
+
+Run **CC2530_Info** next. A healthy runtime UART link prints:
+
+```text
+CC2530 online. Firmware v0.1
+Channel: 11
+ping -> PONG
+```
+
+The host driver resynchronizes the CC2530 UART parser in `CC2530Radio.begin()`.
+This handles the common case where the nRF board resets or re-enumerates during
+upload while the CC2530 keeps running and may have seen partial UART bytes.
+
+If the board uses a nice!nano-compatible bootloader with `SoftDevice: not found`
+in `INFO_UF2.TXT`, select ArduinoNRF's no-SoftDevice bootloader option
+(`bootloader=promicroserialnosd`). Otherwise the upload can succeed while the
+application is linked at the wrong flash address and never starts.
+
 ## Using the debugger API in your own sketch
 
 ```cpp
