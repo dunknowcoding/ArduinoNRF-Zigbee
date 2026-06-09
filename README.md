@@ -1,4 +1,4 @@
-# ArduinoNRF-Zigbee
+# NiusZigbee
 
 Host-side drivers that let an **ArduinoNRF (nRF52840)** board drive external
 **Zigbee / IEEE 802.15.4 radio modules** over a hardware UART. The companion to
@@ -36,6 +36,10 @@ The architecture is built to grow to more modules and a future full‑Zigbee
 2. Install **this library**: *Sketch ▸ Include Library ▸ Add .ZIP Library…*, or
    clone into your Arduino `libraries/` folder, or via Library Manager once
    published.
+
+In Arduino Library Manager it is published as **NiusZigbee**. The GitHub
+repository keeps the historical `ArduinoNRF-Zigbee` name because it is developed
+alongside the ArduinoNRF core.
 
 ## Quick start
 
