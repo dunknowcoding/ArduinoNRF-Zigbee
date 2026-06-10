@@ -27,6 +27,8 @@ run TI Z-Stack or Zigbee PRO internally.
    - Add endpoint 0 Zigbee Device Profile payload builders/parsers.
    - Cover address, active endpoint, simple descriptor, and match descriptor
      discovery before joining/routing is automatic.
+   - Add a static local Device Object descriptor store that can answer those
+     requests from sketch-provided endpoint descriptors.
 
 5. **Association, join, and local tables**
    - Add coordinator/router/end-device state machines on the nRF host while
@@ -72,6 +74,7 @@ run TI Z-Stack or Zigbee PRO internally.
 - `CC2530Radio::sendWithRetries()`
 - `CC2530Radio::sendApsData()`
 - `ZigbeeZdo`
+- `ZigbeeDeviceObject`
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`
@@ -86,9 +89,10 @@ run TI Z-Stack or Zigbee PRO internally.
 
 This gives the library a real MAC envelope, a CC2530 MAC/PHY co-processor
 configuration API, a minimal Zigbee NWK data-frame layer, unicast APS, endpoint
-0 ZDO discovery payload tooling, ZCL command-frame tooling, and tiny reusable
-Basic / OnOff behavior helpers with a boolean report scheduler, while preserving
-the existing raw send / receive / sniffer APIs. It is still not a full Zigbee PRO
-stack: there is no association / join, neighbor table, routing table, route
-discovery, binding, persistent reporting table, persistent attribute storage,
-full cluster library, or Zigbee security yet.
+0 ZDO discovery payload tooling, a static local Device Object descriptor store,
+ZCL command-frame tooling, and tiny reusable Basic / OnOff behavior helpers with
+a boolean report scheduler, while preserving the existing raw send / receive /
+sniffer APIs. It is still not a full Zigbee PRO stack: there is no association
+/ join, neighbor table, routing table, route discovery, binding, persistent
+reporting table, persistent attribute storage, full cluster library, or Zigbee
+security yet.

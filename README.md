@@ -136,6 +136,11 @@ requests/responses. `CC2530_ZdoDiscovery` uses those helpers with CC2530
 hardware filtering and Auto ACK enabled, which is the next step from private
 two-node APS/ZCL frames toward real Zigbee PRO discovery.
 
+`ZigbeeDeviceObject` is a small static descriptor store that can answer those
+ZDO requests from a sketch-provided endpoint table. It is the first reusable
+piece of local device identity, ahead of later join state, binding tables, and
+persistent network storage.
+
 `ZigbeeZcl` also includes small helpers for Read Attributes payloads, Default
 Response payloads, boolean/uint8 attribute records, boolean reports, and applying
 On/Off cluster commands to a local state variable. `CC2530_OnOffCluster` shows
@@ -185,9 +190,9 @@ CC2530 module:
 - `CC2530_ReportingNode` accepts Configure Reporting for OnOff.OnOff and emits
   Report Attributes on state change / max interval.
 - `CC2530_ZdoDiscovery` compiles for two nodes and board1 uploads/runs with
-  endpoint 0 discovery enabled. Board2 was not present as a connected USB serial
-  device during the final pass, so two-board ZDO RX/RSP validation should be
-  rerun after reconnecting board2.
+  endpoint 0 discovery enabled through `ZigbeeDeviceObject`. Board2 was not
+  present as a connected USB serial device during the final pass, so two-board
+  ZDO RX/RSP validation should be rerun after reconnecting board2.
 - Because the examples use promiscuous receive mode, unrelated 802.15.4 traffic
   on the channel can appear as noisy frames; the `hello N` payloads are the link
   confirmation.
@@ -196,8 +201,8 @@ CC2530 module:
 
 NiusZigbee currently implements an SDCC CC2530 MAC/PHY backend plus small
 short-address MAC, Zigbee NWK/APS data-frame, ZDO discovery payload helpers,
-basic ZCL command-frame helpers, tiny reusable Basic / OnOff behavior helpers,
-and a boolean report scheduler,
+static local Device Object descriptors, basic ZCL command-frame helpers, tiny
+reusable Basic / OnOff behavior helpers, and a boolean report scheduler,
 not a full Zigbee PRO stack. Missing full-stack pieces include association and
 join state machines, coordinator / router / end-device roles, neighbor and
 routing tables, full ZCL cluster libraries, binding/groups, persistent reporting

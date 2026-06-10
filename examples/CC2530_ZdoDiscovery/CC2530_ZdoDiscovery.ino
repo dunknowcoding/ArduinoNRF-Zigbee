@@ -27,8 +27,21 @@ static const uint16_t INPUT_CLUSTERS[] = {
   nzb::ZigbeeZcl::kClusterBasic,
   nzb::ZigbeeZcl::kClusterOnOff
 };
+static const nzb::ZigbeeEndpointDescriptor ENDPOINTS[] = {
+  {
+    ENDPOINT,
+    nzb::ZigbeeAps::kProfileHomeAutomation,
+    0x0100,  // On/Off Light
+    1,
+    INPUT_CLUSTERS,
+    (uint8_t)(sizeof(INPUT_CLUSTERS) / sizeof(INPUT_CLUSTERS[0])),
+    nullptr,
+    0
+  }
+};
 
 CC2530Radio radio;
+nzb::ZigbeeDeviceObject device(THIS_IEEE, THIS_NODE, ENDPOINTS, 1);
 uint8_t zdoSequence = 0;
 uint32_t nextAction = 0;
 uint8_t actionStep = 0;
@@ -51,26 +64,6 @@ void printHex64(uint64_t v) {
   }
 }
 
-bool hasCluster(const uint16_t* clusters, uint8_t count, uint16_t clusterId) {
-  for (uint8_t i = 0; i < count; ++i) {
-    if (clusters[i] == clusterId) return true;
-  }
-  return false;
-}
-
-nzb::ZdoSimpleDescriptor localDescriptor() {
-  nzb::ZdoSimpleDescriptor desc;
-  desc.endpoint = ENDPOINT;
-  desc.profileId = nzb::ZigbeeAps::kProfileHomeAutomation;
-  desc.deviceId = 0x0100;  // On/Off Light
-  desc.deviceVersion = 1;
-  desc.inputClusterCount = (uint8_t)(sizeof(INPUT_CLUSTERS) / sizeof(INPUT_CLUSTERS[0]));
-  desc.inputClusters = INPUT_CLUSTERS;
-  desc.outputClusterCount = 0;
-  desc.outputClusters = nullptr;
-  return desc;
-}
-
 bool sendZdo(uint16_t dstShort, uint16_t clusterId,
              const uint8_t* payload, uint8_t payloadLen) {
   return radio.sendZdoCommand(PAN_ID, dstShort, THIS_NODE, dstShort, THIS_NODE,
@@ -78,83 +71,14 @@ bool sendZdo(uint16_t dstShort, uint16_t clusterId,
                               nzb::ZigbeeNwk::kDefaultRadius, true);
 }
 
-void sendAddressResponse(uint16_t dstShort, uint16_t clusterId, uint8_t sequence) {
-  uint8_t payload[nzb::ZigbeeZdo::kMaxPayload];
-  uint8_t n = nzb::ZigbeeZdo::buildAddressResponse(
-      payload, sizeof(payload), sequence, nzb::ZDO_STATUS_SUCCESS,
-      THIS_IEEE, THIS_NODE);
-  bool ok = sendZdo(dstShort, clusterId, payload, n);
-  Serial.println(ok ? "  ZDO address response sent" : "  ZDO address response FAILED");
-}
-
 void handleZdoRequest(const nzb::NwkDataFrame& nwk, const nzb::ApsDataFrame& aps) {
   uint8_t payload[nzb::ZigbeeZdo::kMaxPayload];
-  uint8_t n = 0;
-
-  if (aps.clusterId == nzb::ZDO_IEEE_ADDR_REQ) {
-    nzb::ZdoAddressRequest req;
-    if (nzb::ZigbeeZdo::parseIeeeAddressRequest(aps.payload, aps.payloadLen, req) &&
-        req.nwkAddress == THIS_NODE) {
-      sendAddressResponse(nwk.srcShort, nzb::ZDO_IEEE_ADDR_RSP, req.sequence);
-    }
-    return;
-  }
-
-  if (aps.clusterId == nzb::ZDO_NWK_ADDR_REQ) {
-    nzb::ZdoAddressRequest req;
-    if (nzb::ZigbeeZdo::parseNwkAddressRequest(aps.payload, aps.payloadLen, req) &&
-        req.ieeeAddress == THIS_IEEE) {
-      sendAddressResponse(nwk.srcShort, nzb::ZDO_NWK_ADDR_RSP, req.sequence);
-    }
-    return;
-  }
-
-  if (aps.clusterId == nzb::ZDO_ACTIVE_EP_REQ) {
-    nzb::ZdoActiveEndpointRequest req;
-    if (nzb::ZigbeeZdo::parseActiveEndpointRequest(aps.payload, aps.payloadLen, req) &&
-        req.nwkAddress == THIS_NODE) {
-      uint8_t eps[] = { ENDPOINT };
-      n = nzb::ZigbeeZdo::buildActiveEndpointResponse(
-          payload, sizeof(payload), req.sequence, nzb::ZDO_STATUS_SUCCESS,
-          THIS_NODE, eps, sizeof(eps));
-      bool ok = sendZdo(nwk.srcShort, nzb::ZDO_ACTIVE_EP_RSP, payload, n);
-      Serial.println(ok ? "  Active_EP response sent" : "  Active_EP response FAILED");
-    }
-    return;
-  }
-
-  if (aps.clusterId == nzb::ZDO_SIMPLE_DESC_REQ) {
-    nzb::ZdoSimpleDescriptorRequest req;
-    if (nzb::ZigbeeZdo::parseSimpleDescriptorRequest(
-            aps.payload, aps.payloadLen, req) && req.nwkAddress == THIS_NODE) {
-      nzb::ZdoSimpleDescriptor desc = localDescriptor();
-      uint8_t status = (req.endpoint == ENDPOINT) ? nzb::ZDO_STATUS_SUCCESS
-                                                  : nzb::ZDO_STATUS_NO_DESCRIPTOR;
-      n = nzb::ZigbeeZdo::buildSimpleDescriptorResponse(
-          payload, sizeof(payload), req.sequence, status, THIS_NODE,
-          (status == nzb::ZDO_STATUS_SUCCESS) ? &desc : nullptr);
-      bool ok = sendZdo(nwk.srcShort, nzb::ZDO_SIMPLE_DESC_RSP, payload, n);
-      Serial.println(ok ? "  Simple_Desc response sent" : "  Simple_Desc response FAILED");
-    }
-    return;
-  }
-
-  if (aps.clusterId == nzb::ZDO_MATCH_DESC_REQ) {
-    nzb::ZdoMatchDescriptorRequest req;
-    if (nzb::ZigbeeZdo::parseMatchDescriptorRequest(
-            aps.payload, aps.payloadLen, req) && req.nwkAddress == THIS_NODE) {
-      bool match = req.profileId == nzb::ZigbeeAps::kProfileHomeAutomation;
-      for (uint8_t i = 0; match && i < req.inputClusterCount; ++i) {
-        match = hasCluster(INPUT_CLUSTERS, 2, req.inputClusters[i]);
-      }
-      uint8_t eps[] = { ENDPOINT };
-      n = nzb::ZigbeeZdo::buildMatchDescriptorResponse(
-          payload, sizeof(payload), req.sequence, nzb::ZDO_STATUS_SUCCESS,
-          THIS_NODE, eps, match ? 1 : 0);
-      bool ok = sendZdo(nwk.srcShort, nzb::ZDO_MATCH_DESC_RSP, payload, n);
-      Serial.println(ok ? "  Match_Desc response sent" : "  Match_Desc response FAILED");
-    }
-  }
+  uint16_t responseCluster = 0;
+  uint8_t n = device.handleRequest(aps.clusterId, aps.payload, aps.payloadLen,
+                                   payload, sizeof(payload), responseCluster);
+  if (n == 0) return;
+  bool ok = sendZdo(nwk.srcShort, responseCluster, payload, n);
+  Serial.println(ok ? "  ZDO response sent" : "  ZDO response FAILED");
 }
 
 void printAddressResponse(const nzb::ApsDataFrame& aps) {
