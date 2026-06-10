@@ -14,7 +14,8 @@ Host -> CC2530:  FE  LEN  CMD  [DATA..]  FCS        (FCS = XOR of LEN..DATA)
   0x01 PING                    -> 0x81 PONG [ver_hi ver_lo]
   0x02 SET_CHANNEL [11..26]    -> 0x82 OK
   0x03 TX [psdu..]             -> 0x83 TXSTAT [0=ok / 1=fail]
-  0x04 SET_PROMISC [0|1]       -> 0x82 OK
+  0x04 SET_PROMISC [filter]    -> 0x82 OK
+       filter: 0 = promiscuous / frame filter disabled, 1 = filtered
 CC2530 -> Host (asynchronous):
   0x80 RESET_IND [ver_hi ver_lo]      (sent once at boot)
   0x84 RX_FRAME  [rssi lqi psdu..]

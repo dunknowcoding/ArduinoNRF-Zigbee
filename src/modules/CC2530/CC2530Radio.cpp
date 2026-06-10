@@ -22,7 +22,8 @@ const int16_t RSSI_OFFSET = 73;
 }  // namespace
 
 CC2530Radio::CC2530Radio(HardwareSerial& serial)
-    : serial_(&serial), rxCb_(nullptr), version_(0), channel_(11),
+    : serial_(&serial), rxCb_(nullptr), dataCb_(nullptr), version_(0), channel_(11),
+      macSequence_(0),
       state_(0), len_(0), idx_(0), fcs_(0),
       respCmd_(0), respLen_(0), respReady_(false) {}
 
@@ -60,10 +61,20 @@ void CC2530Radio::feed(uint8_t b) {
       uint8_t cmd = buf_[0];
       if (cmd == RSP_RX_FRAME) {
         // DATA = [rssi][lqi][psdu...]
-        if (len_ >= 3 && rxCb_) {
+        if (len_ >= 3) {
           int8_t rssi = (int8_t)((int16_t)((int8_t)buf_[1]) - RSSI_OFFSET);
           uint8_t lqi = buf_[2];
-          rxCb_(&buf_[3], (uint8_t)(len_ - 3), rssi, lqi);
+          const uint8_t* psdu = &buf_[3];
+          uint8_t psduLen = (uint8_t)(len_ - 3);
+          if (rxCb_) {
+            rxCb_(psdu, psduLen, rssi, lqi);
+          }
+          if (dataCb_) {
+            MacDataFrame frame;
+            if (ZigbeeMac::parseShortDataFrame(psdu, psduLen, frame)) {
+              dataCb_(frame, rssi, lqi);
+            }
+          }
         }
       } else if (cmd == RSP_RESET_IND || cmd == RSP_PONG) {
         if (len_ >= 3) version_ = ((uint16_t)buf_[1] << 8) | buf_[2];
@@ -134,7 +145,9 @@ bool CC2530Radio::setChannel(uint8_t ch) {
 }
 
 bool CC2530Radio::setPromiscuous(bool on) {
-  uint8_t v = on ? 1 : 0;
+  // The firmware writes this value directly to FRMFILT0 bit 0:
+  // 0 = frame filter disabled (promiscuous), 1 = frame filter enabled.
+  uint8_t v = on ? 0 : 1;
   sendFrame(CMD_SET_PROMISC, &v, 1);
   return waitResp(RSP_OK, 300);
 }
@@ -144,6 +157,17 @@ bool CC2530Radio::send(const uint8_t* payload, uint8_t len) {
   sendFrame(CMD_TX, payload, len);
   if (!waitResp(RSP_TXSTAT, 500)) return false;
   return respLen_ >= 1 && respData_[0] == 0;  // 0 = TXDONE, 1 = fail
+}
+
+bool CC2530Radio::sendData(uint16_t panId, uint16_t dstShort, uint16_t srcShort,
+                           const uint8_t* payload, uint8_t len,
+                           bool ackRequest) {
+  uint8_t psdu[kMaxPayload];
+  uint8_t psduLen = ZigbeeMac::buildShortDataFrame(
+      psdu, sizeof(psdu), panId, dstShort, srcShort, macSequence_++,
+      payload, len, ackRequest);
+  if (psduLen == 0) return false;
+  return send(psdu, psduLen);
 }
 
 void CC2530Radio::poll() {

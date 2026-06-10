@@ -9,6 +9,9 @@
 CC2530Radio	KEYWORD1
 IEEE802154Radio	KEYWORD1
 CC2530RxCallback	KEYWORD1
+CC2530DataCallback	KEYWORD1
+MacDataFrame	KEYWORD1
+ZigbeeMac	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -21,11 +24,18 @@ setChannel	KEYWORD2
 channel	KEYWORD2
 setPromiscuous	KEYWORD2
 send	KEYWORD2
+sendData	KEYWORD2
 onReceive	KEYWORD2
+onDataReceive	KEYWORD2
 poll	KEYWORD2
+buildShortDataFrame	KEYWORD2
+parseShortDataFrame	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
 #######################################
 
 kMaxPayload	LITERAL1
+kMaxPsdu	LITERAL1
+kBroadcastPan	LITERAL1
+kBroadcastShort	LITERAL1
