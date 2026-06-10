@@ -13,6 +13,7 @@
 #include "modules/CC2530/CC2530Radio.h"
 #include "ZigbeeClusters.h"
 #include "ZigbeeDevice.h"
+#include "ZigbeeTables.h"
 #include "ZigbeeReporting.h"
 
 using nzb::CC2530Radio;
@@ -42,6 +43,10 @@ using nzb::ZigbeeAps;
 using nzb::ZigbeeZdo;
 using nzb::ZigbeeEndpointDescriptor;
 using nzb::ZigbeeDeviceObject;
+using nzb::ZigbeeNeighbor;
+using nzb::ZigbeeNeighborTable;
+using nzb::ZigbeeRoute;
+using nzb::ZigbeeRouteTable;
 using nzb::ZigbeeZcl;
 using nzb::ZigbeeOnOffCluster;
 using nzb::ZigbeeBasicCluster;

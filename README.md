@@ -141,6 +141,11 @@ ZDO requests from a sketch-provided endpoint table. It is the first reusable
 piece of local device identity, ahead of later join state, binding tables, and
 persistent network storage.
 
+`ZigbeeNeighborTable` and `ZigbeeRouteTable` provide fixed-storage local network
+tables for the next Zigbee PRO steps. They do not run routing by themselves, but
+they give future association, parent selection, route discovery, and route aging
+code a no-heap storage base.
+
 `ZigbeeZcl` also includes small helpers for Read Attributes payloads, Default
 Response payloads, boolean/uint8 attribute records, boolean reports, and applying
 On/Off cluster commands to a local state variable. `CC2530_OnOffCluster` shows
@@ -201,13 +206,14 @@ CC2530 module:
 
 NiusZigbee currently implements an SDCC CC2530 MAC/PHY backend plus small
 short-address MAC, Zigbee NWK/APS data-frame, ZDO discovery payload helpers,
-static local Device Object descriptors, basic ZCL command-frame helpers, tiny
-reusable Basic / OnOff behavior helpers, and a boolean report scheduler,
+static local Device Object descriptors, fixed neighbor/route tables, basic ZCL
+command-frame helpers, tiny reusable Basic / OnOff behavior helpers, and a
+boolean report scheduler,
 not a full Zigbee PRO stack. Missing full-stack pieces include association and
-join state machines, coordinator / router / end-device roles, neighbor and
-routing tables, full ZCL cluster libraries, binding/groups, persistent reporting
-tables, Trust Center behavior, install codes, NWK/APS security, and Zigbee PRO
-route discovery/repair. A future ZNP / Z-Stack backend can live beside the raw driver. See
+join state machines, coordinator / router / end-device roles, actual neighbor
+aging/routing protocols, full ZCL cluster libraries, binding/groups, persistent
+reporting tables, Trust Center behavior, install codes, NWK/APS security, and
+Zigbee PRO route discovery/repair. A future ZNP / Z-Stack backend can live beside the raw driver. See
 [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules

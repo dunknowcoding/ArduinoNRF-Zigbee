@@ -16,7 +16,7 @@
 #ifndef ARDUINONRF_ZIGBEE_H
 #define ARDUINONRF_ZIGBEE_H
 
-#define ARDUINONRF_ZIGBEE_VERSION "0.2.1"
+#define ARDUINONRF_ZIGBEE_VERSION "0.2.2"
 
 #include "ZigbeeModule.h"
 #include "ZigbeeMac.h"
@@ -24,6 +24,7 @@
 #include "ZigbeeAps.h"
 #include "ZigbeeZdo.h"
 #include "ZigbeeDevice.h"
+#include "ZigbeeTables.h"
 #include "ZigbeeZcl.h"
 #include "ZigbeeClusters.h"
 #include "ZigbeeReporting.h"
