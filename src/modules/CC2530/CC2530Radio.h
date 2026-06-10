@@ -41,6 +41,9 @@ typedef void (*CC2530DataCallback)(const MacDataFrame& frame, int8_t rssi,
 typedef void (*CC2530NwkCallback)(const MacDataFrame& mac,
                                   const NwkDataFrame& nwk, int8_t rssi,
                                   uint8_t lqi);
+typedef void (*CC2530NwkCommandCallback)(const MacDataFrame& mac,
+                                         const NwkCommandFrame& nwk,
+                                         int8_t rssi, uint8_t lqi);
 typedef void (*CC2530ApsCallback)(const MacDataFrame& mac,
                                   const NwkDataFrame& nwk,
                                   const ApsDataFrame& aps, int8_t rssi,
@@ -129,6 +132,14 @@ class CC2530Radio {
                    uint8_t radius = ZigbeeNwk::kDefaultRadius,
                    bool ackRequest = false);
 
+  /** Transmit a Zigbee NWK command frame inside a short-address MAC frame. */
+  bool sendNwkCommand(uint16_t panId, uint16_t macDstShort,
+                      uint16_t macSrcShort, uint16_t nwkDstShort,
+                      uint16_t nwkSrcShort, uint8_t commandId,
+                      const uint8_t* payload, uint8_t len,
+                      uint8_t radius = ZigbeeNwk::kDefaultRadius,
+                      bool ackRequest = false);
+
   /** Transmit a simple Zigbee APS data frame inside a NWK data frame. */
   bool sendApsData(uint16_t panId, uint16_t macDstShort, uint16_t macSrcShort,
                    uint16_t nwkDstShort, uint16_t nwkSrcShort,
@@ -167,6 +178,9 @@ class CC2530Radio {
   /** Register a parsed Zigbee NWK data-frame callback (delivered from poll()). */
   void onNwkReceive(CC2530NwkCallback cb) { nwkCb_ = cb; }
 
+  /** Register a parsed Zigbee NWK command-frame callback (delivered from poll()). */
+  void onNwkCommandReceive(CC2530NwkCommandCallback cb) { nwkCommandCb_ = cb; }
+
   /** Register a parsed Zigbee APS data-frame callback (delivered from poll()). */
   void onApsReceive(CC2530ApsCallback cb) { apsCb_ = cb; }
 
@@ -184,6 +198,7 @@ class CC2530Radio {
   CC2530RxCallback rxCb_;
   CC2530DataCallback dataCb_;
   CC2530NwkCallback nwkCb_;
+  CC2530NwkCommandCallback nwkCommandCb_;
   CC2530ApsCallback apsCb_;
   CC2530ZdoCallback zdoCb_;
   CC2530ZclCallback zclCb_;

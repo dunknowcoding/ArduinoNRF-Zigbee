@@ -99,12 +99,14 @@ void loop() {
 | `sendWithRetries(payload, len, retries)` / `lastTxAttempts()` | transmit with per-call retry count and read attempt count |
 | `sendData(pan, dst, src, payload, len)` | build + transmit a short-address 802.15.4 data frame |
 | `sendNwkData(pan, macDst, macSrc, nwkDst, nwkSrc, payload, len)` | build + transmit a simple Zigbee NWK data frame |
+| `sendNwkCommand(...)` | build + transmit a Zigbee NWK command frame |
 | `sendApsData(...)` | build + transmit a simple unicast Zigbee APS data frame |
 | `sendZdoCommand(...)` | build + transmit a Zigbee Device Profile command on endpoint 0 |
 | `sendZclCommand(...)` | build + transmit a basic ZCL command frame |
 | `onReceive(cb)` + `poll()` | deliver received frames to your callback |
 | `onDataReceive(cb)` + `poll()` | parse and deliver short-address MAC data frames |
 | `onNwkReceive(cb)` + `poll()` | parse and deliver simple Zigbee NWK data frames |
+| `onNwkCommandReceive(cb)` + `poll()` | parse and deliver simple Zigbee NWK command frames |
 | `onApsReceive(cb)` + `poll()` | parse and deliver simple Zigbee APS data frames |
 | `onZdoReceive(cb)` + `poll()` | deliver endpoint 0 / profile 0 Zigbee Device Profile frames |
 | `onZclReceive(cb)` + `poll()` | parse and deliver basic ZCL command frames |
@@ -123,6 +125,11 @@ that future NWK / APS / ZCL code can build on.
 NWK data frame with destination/source short address, radius, sequence number,
 and payload. Optional NWK fields such as security, multicast, source routing,
 and IEEE address extension are intentionally not accepted by this helper yet.
+
+`sendNwkCommand()` and `onNwkCommandReceive()` add the first NWK command path:
+Route Request, Route Reply, Network Status, Route Record, Leave, and Rejoin
+payload builders/parsers. These are command-frame tools, not a full route
+discovery or rejoin state machine yet.
 
 `sendApsData()` / `sendZclCommand()` add unicast APS endpoint/profile/cluster
 framing and basic ZCL command-frame construction. They are useful for exercising
@@ -211,10 +218,10 @@ CC2530 module:
 ## Current stack boundary
 
 NiusZigbee currently implements an SDCC CC2530 MAC/PHY backend plus small
-short-address MAC, Zigbee NWK/APS data-frame, ZDO discovery payload helpers,
-static local Device Object descriptors, fixed neighbor/route tables, basic ZCL
-command-frame helpers, local network-state helpers, tiny reusable Basic / OnOff
-behavior helpers, and a boolean report scheduler,
+short-address MAC, Zigbee NWK data/command and APS data-frame helpers, ZDO
+discovery payload helpers, static local Device Object descriptors, fixed
+neighbor/route tables, basic ZCL command-frame helpers, local network-state
+helpers, tiny reusable Basic / OnOff behavior helpers, and a boolean report scheduler,
 not a full Zigbee PRO stack. Missing full-stack pieces include association and
 over-the-air join state machines, actual neighbor aging/routing protocols, full
 ZCL cluster libraries, binding/groups, persistent reporting tables, Trust Center

@@ -29,7 +29,8 @@ const int16_t RSSI_OFFSET = 73;
 
 CC2530Radio::CC2530Radio(HardwareSerial& serial)
     : serial_(&serial), rxCb_(nullptr), dataCb_(nullptr), nwkCb_(nullptr),
-      apsCb_(nullptr), zdoCb_(nullptr), zclCb_(nullptr), version_(0), channel_(11),
+      nwkCommandCb_(nullptr), apsCb_(nullptr), zdoCb_(nullptr), zclCb_(nullptr),
+      version_(0), channel_(11),
       macSequence_(0), nwkSequence_(0), apsCounter_(0), zclSequence_(0),
       lastTxAttempts_(0),
       state_(0), len_(0), idx_(0), fcs_(0),
@@ -77,7 +78,7 @@ void CC2530Radio::feed(uint8_t b) {
           if (rxCb_) {
             rxCb_(psdu, psduLen, rssi, lqi);
           }
-          if (dataCb_ || nwkCb_ || apsCb_ || zdoCb_ || zclCb_) {
+          if (dataCb_ || nwkCb_ || nwkCommandCb_ || apsCb_ || zdoCb_ || zclCb_) {
             MacDataFrame frame;
             if (ZigbeeMac::parseShortDataFrame(psdu, psduLen, frame)) {
               if (dataCb_) {
@@ -108,6 +109,13 @@ void CC2530Radio::feed(uint8_t b) {
                       }
                     }
                   }
+                }
+              }
+              if (nwkCommandCb_) {
+                NwkCommandFrame nwkCommand;
+                if (ZigbeeNwk::parseCommandFrame(frame.payload, frame.payloadLen,
+                                                 nwkCommand)) {
+                  nwkCommandCb_(frame, nwkCommand, rssi, lqi);
                 }
               }
             }
@@ -266,6 +274,19 @@ bool CC2530Radio::sendNwkData(uint16_t panId, uint16_t macDstShort,
   uint8_t npduLen = ZigbeeNwk::buildDataFrame(
       npdu, sizeof(npdu), nwkDstShort, nwkSrcShort, radius, nwkSequence_++,
       payload, len);
+  if (npduLen == 0) return false;
+  return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
+}
+
+bool CC2530Radio::sendNwkCommand(uint16_t panId, uint16_t macDstShort,
+                                 uint16_t macSrcShort, uint16_t nwkDstShort,
+                                 uint16_t nwkSrcShort, uint8_t commandId,
+                                 const uint8_t* payload, uint8_t len,
+                                 uint8_t radius, bool ackRequest) {
+  uint8_t npdu[ZigbeeNwk::kMaxFrame];
+  uint8_t npduLen = ZigbeeNwk::buildCommandFrame(
+      npdu, sizeof(npdu), nwkDstShort, nwkSrcShort, radius, nwkSequence_++,
+      commandId, payload, len);
   if (npduLen == 0) return false;
   return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
 }

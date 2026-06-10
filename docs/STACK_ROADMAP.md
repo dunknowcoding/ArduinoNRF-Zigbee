@@ -18,6 +18,8 @@ run TI Z-Stack or Zigbee PRO internally.
 2. **Zigbee NWK frame helpers**
    - Add Zigbee network header construction/parsing on top of MAC payloads.
    - Keep this initially as frame tooling, not automatic joining/routing.
+   - Add NWK command payload helpers for route request/reply, network status,
+     route record, leave, and rejoin messages.
 
 3. **APS and ZCL frame helpers**
    - Add endpoint/profile/cluster addressing and common ZCL command encoders.
@@ -54,9 +56,15 @@ run TI Z-Stack or Zigbee PRO internally.
 - `examples/CC2530_MacLink`
 - `ZigbeeNwk::buildDataFrame()`
 - `ZigbeeNwk::parseDataFrame()`
+- `ZigbeeNwk::buildCommandFrame()`
+- `ZigbeeNwk::parseCommandFrame()`
+- `ZigbeeNwk` route request/reply, network status, route record, leave, and rejoin helpers
 - `CC2530Radio::sendNwkData()`
 - `CC2530Radio::onNwkReceive()`
+- `CC2530Radio::sendNwkCommand()`
+- `CC2530Radio::onNwkCommandReceive()`
 - `examples/CC2530_NwkLink`
+- `examples/CC2530_NwkCommandLink`
 - `ZigbeeAps::buildDataFrame()`
 - `ZigbeeAps::parseDataFrame()`
 - `ZigbeeZcl::buildCommandFrame()`
@@ -97,11 +105,12 @@ run TI Z-Stack or Zigbee PRO internally.
 
 This gives the library a real MAC envelope, a CC2530 MAC/PHY co-processor
 configuration API, a minimal Zigbee NWK data-frame layer, unicast APS, endpoint
-0 ZDO discovery payload tooling, a static local Device Object descriptor store,
-fixed neighbor/route table storage, ZCL command-frame tooling, and tiny reusable
-Basic / OnOff behavior helpers with a boolean report scheduler, and local
-network-state/permit-join/address-allocation helpers, while preserving the
-existing raw send / receive / sniffer APIs. It is still not a full Zigbee PRO
-stack: there is no over-the-air association / join exchange, neighbor aging
-protocol, route discovery, binding, persistent reporting table, persistent
-attribute storage, full cluster library, or Zigbee security yet.
+0 ZDO discovery payload tooling, NWK command-frame tooling, a static local
+Device Object descriptor store, fixed neighbor/route table storage, ZCL
+command-frame tooling, and tiny reusable Basic / OnOff behavior helpers with a
+boolean report scheduler, and local network-state/permit-join/address-allocation
+helpers, while preserving the existing raw send / receive / sniffer APIs. It is
+still not a full Zigbee PRO stack: there is no over-the-air association / join
+exchange, neighbor aging protocol, automatic route discovery, binding,
+persistent reporting table, persistent attribute storage, full cluster library,
+or Zigbee security yet.
