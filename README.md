@@ -59,6 +59,7 @@ alongside the ArduinoNRF core.
    - **CC2530_NwkLink** — a two-node Zigbee NWK data-frame link
    - **CC2530_ZclLink** — a two-node APS/ZCL On/Off command-frame link
    - **CC2530_OnOffCluster** — a tiny two-node On/Off cluster behavior demo
+   - **CC2530_ClusterNode** — reusable Basic + On/Off cluster node demo
 
 > Board layout note: some nice!nano-compatible bootloaders report
 > `SoftDevice: not found` in `INFO_UF2.TXT`. For those boards, select the
@@ -127,6 +128,10 @@ Response payloads, boolean/uint8 attribute records, boolean reports, and applyin
 On/Off cluster commands to a local state variable. `CC2530_OnOffCluster` shows
 how to combine those helpers into a minimal behavior loop.
 
+`ZigbeeOnOffCluster` and `ZigbeeBasicCluster` are the first reusable behavior
+helpers. They can build ZCL responses for On/Off state changes, OnOff reads, and
+Basic cluster reads such as ManufacturerName, ModelIdentifier, and PowerSource.
+
 `begin()` also resynchronizes the CC2530 firmware's framed UART parser before
 the first ping. This matters after host uploads/resets because the CC2530 may
 keep running while the nRF resets, leaving the module mid-frame.
@@ -149,6 +154,9 @@ CC2530 module:
   shows reciprocal `ZCL RX ... cmd=0x02` traffic on channel 11.
 - `CC2530_OnOffCluster` applies Toggle to a local OnOff state, replies with ZCL
   Default Response, and answers Read Attributes for the OnOff attribute.
+- `CC2530_ClusterNode` dispatches incoming ZCL frames through reusable
+  `ZigbeeOnOffCluster` / `ZigbeeBasicCluster` helpers and answers Basic +
+  On/Off reads.
 - Because the examples use promiscuous receive mode, unrelated 802.15.4 traffic
   on the channel can appear as noisy frames; the `hello N` payloads are the link
   confirmation.
@@ -156,8 +164,8 @@ CC2530 module:
 ## Current stack boundary
 
 NiusZigbee currently implements a raw IEEE 802.15.4 CC2530 backend plus small
-short-address MAC, Zigbee NWK/APS data-frame, and basic ZCL command-frame
-helpers plus a tiny On/Off cluster behavior demo, not a full Zigbee PRO stack.
+short-address MAC, Zigbee NWK/APS data-frame, basic ZCL command-frame helpers,
+and tiny reusable Basic / OnOff behavior helpers, not a full Zigbee PRO stack.
 Missing full-stack pieces include ZDO, coordinator / router / end-device join
 flows, full ZCL cluster libraries, binding/groups, reporting configuration,
 Trust Center behavior, install codes, and Zigbee security. A future ZNP /

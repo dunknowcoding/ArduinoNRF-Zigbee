@@ -1,5 +1,7 @@
 #include "ZigbeeZcl.h"
 
+#include <string.h>
+
 namespace nzb {
 
 uint8_t ZigbeeZcl::buildCommandFrame(uint8_t* out, uint8_t outMax,
@@ -128,6 +130,23 @@ uint8_t ZigbeeZcl::buildUint8AttributeRecord(uint8_t* out, uint8_t outMax,
   out[3] = ZCL_TYPE_UINT8;
   out[4] = value;
   return 5;
+}
+
+uint8_t ZigbeeZcl::buildCharStringAttributeRecord(uint8_t* out, uint8_t outMax,
+                                                  uint16_t attrId,
+                                                  const char* value) {
+  if (!out || !value) return 0;
+  size_t len = strlen(value);
+  if (len > 255) len = 255;
+  if (outMax < 5 + len) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = ZCL_STATUS_SUCCESS;
+  out[3] = ZCL_TYPE_CHAR_STRING;
+  out[4] = (uint8_t)len;
+  for (uint8_t i = 0; i < (uint8_t)len; ++i) {
+    out[5 + i] = (uint8_t)value[i];
+  }
+  return (uint8_t)(5 + len);
 }
 
 uint8_t ZigbeeZcl::buildReportBoolAttributePayload(uint8_t* out,

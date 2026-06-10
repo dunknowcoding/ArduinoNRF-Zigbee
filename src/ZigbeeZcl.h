@@ -75,6 +75,12 @@ class ZigbeeZcl {
   static const uint16_t kClusterLevelControl = 0x0008;
   static const uint16_t kAttrOnOff = 0x0000;
   static const uint16_t kAttrBasicZclVersion = 0x0000;
+  static const uint16_t kAttrBasicApplicationVersion = 0x0001;
+  static const uint16_t kAttrBasicStackVersion = 0x0002;
+  static const uint16_t kAttrBasicHardwareVersion = 0x0003;
+  static const uint16_t kAttrBasicManufacturerName = 0x0004;
+  static const uint16_t kAttrBasicModelIdentifier = 0x0005;
+  static const uint16_t kAttrBasicDateCode = 0x0006;
   static const uint16_t kAttrBasicPowerSource = 0x0007;
 
   static uint8_t buildCommandFrame(uint8_t* out, uint8_t outMax,
@@ -111,6 +117,10 @@ class ZigbeeZcl {
 
   static uint8_t buildUint8AttributeRecord(uint8_t* out, uint8_t outMax,
                                            uint16_t attrId, uint8_t value);
+
+  static uint8_t buildCharStringAttributeRecord(uint8_t* out, uint8_t outMax,
+                                                uint16_t attrId,
+                                                const char* value);
 
   static uint8_t buildReportBoolAttributePayload(uint8_t* out, uint8_t outMax,
                                                  uint16_t attrId, bool value);

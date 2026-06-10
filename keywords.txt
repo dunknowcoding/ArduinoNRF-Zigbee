@@ -21,6 +21,8 @@ ZigbeeMac	KEYWORD1
 ZigbeeNwk	KEYWORD1
 ZigbeeAps	KEYWORD1
 ZigbeeZcl	KEYWORD1
+ZigbeeOnOffCluster	KEYWORD1
+ZigbeeBasicCluster	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -56,8 +58,17 @@ parseDefaultResponsePayload	KEYWORD2
 buildAttributeStatusRecord	KEYWORD2
 buildBoolAttributeRecord	KEYWORD2
 buildUint8AttributeRecord	KEYWORD2
+buildCharStringAttributeRecord	KEYWORD2
 buildReportBoolAttributePayload	KEYWORD2
 applyOnOffCommand	KEYWORD2
+isOn	KEYWORD2
+setOn	KEYWORD2
+applyCommand	KEYWORD2
+buildReadAttributesResponse	KEYWORD2
+handleFrame	KEYWORD2
+setVersions	KEYWORD2
+setIdentity	KEYWORD2
+setPowerSource	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
@@ -79,6 +90,12 @@ kClusterOnOff	LITERAL1
 kClusterLevelControl	LITERAL1
 kAttrOnOff	LITERAL1
 kAttrBasicZclVersion	LITERAL1
+kAttrBasicApplicationVersion	LITERAL1
+kAttrBasicStackVersion	LITERAL1
+kAttrBasicHardwareVersion	LITERAL1
+kAttrBasicManufacturerName	LITERAL1
+kAttrBasicModelIdentifier	LITERAL1
+kAttrBasicDateCode	LITERAL1
 kAttrBasicPowerSource	LITERAL1
 ZCL_CMD_READ_ATTRIBUTES	LITERAL1
 ZCL_CMD_READ_ATTRIBUTES_RESPONSE	LITERAL1
@@ -89,6 +106,7 @@ ZCL_STATUS_UNSUPPORTED_CLUSTER_COMMAND	LITERAL1
 ZCL_STATUS_UNSUPPORTED_ATTRIBUTE	LITERAL1
 ZCL_TYPE_BOOLEAN	LITERAL1
 ZCL_TYPE_UINT8	LITERAL1
+ZCL_TYPE_CHAR_STRING	LITERAL1
 ZCL_ON_OFF_CMD_OFF	LITERAL1
 ZCL_ON_OFF_CMD_ON	LITERAL1
 ZCL_ON_OFF_CMD_TOGGLE	LITERAL1
