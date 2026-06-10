@@ -15,6 +15,7 @@
 #include "ZigbeeReporting.h"
 
 using nzb::CC2530Radio;
+using nzb::CC2530MacInfo;
 using nzb::CC2530RxCallback;
 using nzb::CC2530DataCallback;
 using nzb::CC2530NwkCallback;

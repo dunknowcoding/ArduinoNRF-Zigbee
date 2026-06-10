@@ -31,7 +31,7 @@ the CC2530's DMA engine (read-back verified).
 Run **CC2530_Info** next. A healthy runtime UART link prints:
 
 ```text
-CC2530 online. Firmware v0.1
+CC2530 online. Firmware v0.2
 Channel: 11
 ping -> PONG
 ```

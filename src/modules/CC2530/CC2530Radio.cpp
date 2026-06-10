@@ -11,12 +11,18 @@ const uint8_t CMD_PING = 0x01;
 const uint8_t CMD_SET_CHANNEL = 0x02;
 const uint8_t CMD_TX = 0x03;
 const uint8_t CMD_SET_PROMISC = 0x04;
+const uint8_t CMD_SET_ADDR = 0x05;
+const uint8_t CMD_SET_MAC = 0x06;
+const uint8_t CMD_GET_MAC = 0x07;
+const uint8_t CMD_TX_ADV = 0x08;
+const uint8_t CMD_SET_TX_POWER = 0x09;
 // module -> host
 const uint8_t RSP_RESET_IND = 0x80;
 const uint8_t RSP_PONG = 0x81;
 const uint8_t RSP_OK = 0x82;
 const uint8_t RSP_TXSTAT = 0x83;
 const uint8_t RSP_RX_FRAME = 0x84;
+const uint8_t RSP_MAC_INFO = 0x85;
 // The CC2530 appends RSSI with this offset (datasheet): dBm = raw - 73.
 const int16_t RSSI_OFFSET = 73;
 }  // namespace
@@ -25,6 +31,7 @@ CC2530Radio::CC2530Radio(HardwareSerial& serial)
     : serial_(&serial), rxCb_(nullptr), dataCb_(nullptr), nwkCb_(nullptr),
       apsCb_(nullptr), zclCb_(nullptr), version_(0), channel_(11),
       macSequence_(0), nwkSequence_(0), apsCounter_(0), zclSequence_(0),
+      lastTxAttempts_(0),
       state_(0), len_(0), idx_(0), fcs_(0),
       respCmd_(0), respLen_(0), respReady_(false) {}
 
@@ -177,11 +184,61 @@ bool CC2530Radio::setPromiscuous(bool on) {
   return waitResp(RSP_OK, 300);
 }
 
+bool CC2530Radio::setAddress(uint16_t panId, uint16_t shortAddress,
+                             const uint8_t ieeeAddress[8]) {
+  uint8_t d[12];
+  d[0] = (uint8_t)panId;
+  d[1] = (uint8_t)(panId >> 8);
+  d[2] = (uint8_t)shortAddress;
+  d[3] = (uint8_t)(shortAddress >> 8);
+  for (uint8_t i = 0; i < 8; ++i) d[4 + i] = ieeeAddress ? ieeeAddress[i] : 0;
+  sendFrame(CMD_SET_ADDR, d, sizeof(d));
+  return waitResp(RSP_OK, 300);
+}
+
+bool CC2530Radio::configureMac(uint8_t flags, uint8_t retries) {
+  uint8_t d[2] = {
+      (uint8_t)(flags & (kMacFilter | kMacAutoAck | kMacCcaTx)),
+      retries
+  };
+  sendFrame(CMD_SET_MAC, d, sizeof(d));
+  return waitResp(RSP_OK, 300);
+}
+
+bool CC2530Radio::getMacInfo(CC2530MacInfo& info) {
+  sendFrame(CMD_GET_MAC, nullptr, 0);
+  if (!waitResp(RSP_MAC_INFO, 300) || respLen_ < 14) return false;
+  info.flags = respData_[0];
+  info.retries = respData_[1];
+  info.panId = (uint16_t)respData_[2] | ((uint16_t)respData_[3] << 8);
+  info.shortAddress = (uint16_t)respData_[4] | ((uint16_t)respData_[5] << 8);
+  for (uint8_t i = 0; i < 8; ++i) info.ieeeAddress[i] = respData_[6 + i];
+  return true;
+}
+
+bool CC2530Radio::setTxPowerRaw(uint8_t txpower) {
+  sendFrame(CMD_SET_TX_POWER, &txpower, 1);
+  return waitResp(RSP_OK, 300);
+}
+
 bool CC2530Radio::send(const uint8_t* payload, uint8_t len) {
   if (len > kMaxPayload) return false;
   sendFrame(CMD_TX, payload, len);
   if (!waitResp(RSP_TXSTAT, 500)) return false;
+  lastTxAttempts_ = respLen_ >= 2 ? respData_[1] : 0;
   return respLen_ >= 1 && respData_[0] == 0;  // 0 = TXDONE, 1 = fail
+}
+
+bool CC2530Radio::sendWithRetries(const uint8_t* payload, uint8_t len,
+                                  uint8_t retries) {
+  if (len > kMaxPayload) return false;
+  uint8_t d[kMaxPayload + 1];
+  d[0] = retries;
+  for (uint8_t i = 0; i < len; ++i) d[1 + i] = payload[i];
+  sendFrame(CMD_TX_ADV, d, (uint8_t)(len + 1));
+  if (!waitResp(RSP_TXSTAT, 500)) return false;
+  lastTxAttempts_ = respLen_ >= 2 ? respData_[1] : 0;
+  return respLen_ >= 1 && respData_[0] == 0;
 }
 
 bool CC2530Radio::sendData(uint16_t panId, uint16_t dstShort, uint16_t srcShort,

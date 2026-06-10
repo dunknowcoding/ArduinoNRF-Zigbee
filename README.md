@@ -92,7 +92,11 @@ void loop() {
 | `ping()` / `firmwareVersion()` | liveness check / firmware version |
 | `setChannel(11..26)` / `channel()` | select / read the 802.15.4 channel |
 | `setPromiscuous(bool)` | receive all frames (sniffer) vs filtered |
+| `setAddress(pan, short, ieee)` | program CC2530 PAN ID, short address, and IEEE address registers |
+| `configureMac(flags, retries)` / `getMacInfo(info)` | control/read hardware filtering, Auto ACK, CCA TX, and retry count |
+| `setTxPowerRaw(value)` | write the CC2530 TXPOWER register |
 | `send(payload, len)` | transmit a raw 802.15.4 frame (radio adds FCS) |
+| `sendWithRetries(payload, len, retries)` / `lastTxAttempts()` | transmit with per-call retry count and read attempt count |
 | `sendData(pan, dst, src, payload, len)` | build + transmit a short-address 802.15.4 data frame |
 | `sendNwkData(pan, macDst, macSrc, nwkDst, nwkSrc, payload, len)` | build + transmit a simple Zigbee NWK data frame |
 | `sendApsData(...)` | build + transmit a simple unicast Zigbee APS data frame |
@@ -141,6 +145,12 @@ ZCL Report Attributes frames when a sketch should publish a report.
 the first ping. This matters after host uploads/resets because the CC2530 may
 keep running while the nRF resets, leaving the module mid-frame.
 
+The bundled SDCC firmware is now a small MAC/PHY co-processor: the nRF can set
+the CC2530 hardware PAN/short/IEEE address registers, enable frame filtering,
+use the CC2530 Auto ACK path, request CCA transmit, and configure retry count.
+That is still below full Zigbee PRO, but it removes the earlier all-promiscuous
+assumption and gives the future join/routing/security work a real MAC base.
+
 ## Verified behavior
 
 Hardware verified with two ArduinoNRF ProMicro nRF52840 boards, each wired to a
@@ -148,7 +158,9 @@ CC2530 module:
 
 - `CC2530_FlashFirmware` detects `0xA5xx`, flashes the SDCC transceiver, and
   verifies read-back.
-- `CC2530_Info` reports firmware `v0.1` and repeated `ping -> PONG`.
+- `CC2530_Info` reports firmware `v0.2` and repeated `ping -> PONG`.
+- `CC2530_MacControl` writes PAN/short/IEEE address, enables filtering +
+  Auto ACK + CCA TX with three retries, and reads the settings back.
 - `CC2530_Link` on two boards shows `TX "hello N" ok` and reciprocal
   `RX (... dBm): hello N` frames on channel 11.
 - `CC2530_MacLink` builds standards-shaped short-address MAC data frames and
@@ -170,13 +182,15 @@ CC2530 module:
 
 ## Current stack boundary
 
-NiusZigbee currently implements a raw IEEE 802.15.4 CC2530 backend plus small
+NiusZigbee currently implements an SDCC CC2530 MAC/PHY backend plus small
 short-address MAC, Zigbee NWK/APS data-frame, basic ZCL command-frame helpers,
 tiny reusable Basic / OnOff behavior helpers, and a boolean report scheduler,
-not a full Zigbee PRO stack. Missing full-stack pieces include ZDO, coordinator
-/ router / end-device join flows, full ZCL cluster libraries, binding/groups,
-persistent reporting tables, Trust Center behavior, install codes, and Zigbee
-security. A future ZNP / Z-Stack backend can live beside the raw driver. See
+not a full Zigbee PRO stack. Missing full-stack pieces include association and
+join state machines, ZDO discovery, coordinator / router / end-device roles,
+neighbor and routing tables, full ZCL cluster libraries, binding/groups,
+persistent reporting tables, Trust Center behavior, install codes, NWK/APS
+security, and Zigbee PRO route discovery/repair. A future ZNP / Z-Stack backend
+can live beside the raw driver. See
 [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules

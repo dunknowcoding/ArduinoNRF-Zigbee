@@ -1,21 +1,29 @@
 /* CC2530 802.15.4 radio co-processor (SDCC) for ArduinoNRF.
  *
- * Turns a CC2530 module into a UART-controlled 802.15.4 transceiver. Runs on the
- * 32 MHz XOSC started via CLKCONCMD (the path that works on clone modules where
- * the stock Z-Stack SLEEPCMD sequence hangs). Host protocol over UART0 @115200:
+ * Turns a CC2530 module into a UART-controlled 802.15.4 MAC/PHY helper. Runs on
+ * the 32 MHz XOSC started via CLKCONCMD (the path that works on clone modules
+ * where the stock Z-Stack SLEEPCMD sequence hangs). Host protocol over UART0
+ * @115200:
  *
  *   Host -> CC2530:  FE  LEN  CMD  [DATA..]  FCS      (FCS = XOR of LEN..DATA)
  *     0x01 PING                      -> 0x81 PONG [ver_hi ver_lo]
  *     0x02 SET_CHANNEL [ch 11..26]   -> 0x82 OK
- *     0x03 TX [psdu..]               -> 0x83 TXSTAT [0=ok/1=fail]
+ *     0x03 TX [psdu..]               -> 0x83 TXSTAT [status attempts]
  *     0x04 SET_PROMISC [filter]      -> 0x82 OK
  *          filter: 0=promiscuous/frame filter disabled, 1=filtered
+ *     0x05 SET_ADDR [pan short ieee] -> 0x82 OK
+ *          pan/short little-endian, ieee = 8 bytes little-endian
+ *     0x06 SET_MAC [flags retries]   -> 0x82 OK
+ *          flags bit0=filter, bit1=auto ACK, bit2=CCA TX
+ *     0x07 GET_MAC                   -> 0x85 MAC_INFO [flags retries pan short ieee]
+ *     0x08 TX_ADV [retries psdu..]   -> 0x83 TXSTAT [status attempts]
+ *     0x09 SET_TX_POWER [raw]        -> 0x82 OK
  *   CC2530 -> Host (async):
  *     0x80 RESET_IND [ver_hi ver_lo]
  *     0x84 RX_FRAME [rssi lqi psdu..]
  */
 #define FW_VER_HI 0
-#define FW_VER_LO 1
+#define FW_VER_LO 2
 
 /* ---- SFRs ---- */
 __sfr __at (0xF1) PERCFG;
@@ -32,7 +40,20 @@ __sfr __at (0xE1) RFST;
 __sfr __at (0xD9) RFD;
 __sfr __at (0x91) RFIRQF1;
 __sfr __at (0xE9) RFIRQF0;
+
 /* ---- RF XREGs ---- */
+__xdata __at (0x616A) volatile unsigned char EXT_ADDR0;
+__xdata __at (0x616B) volatile unsigned char EXT_ADDR1;
+__xdata __at (0x616C) volatile unsigned char EXT_ADDR2;
+__xdata __at (0x616D) volatile unsigned char EXT_ADDR3;
+__xdata __at (0x616E) volatile unsigned char EXT_ADDR4;
+__xdata __at (0x616F) volatile unsigned char EXT_ADDR5;
+__xdata __at (0x6170) volatile unsigned char EXT_ADDR6;
+__xdata __at (0x6171) volatile unsigned char EXT_ADDR7;
+__xdata __at (0x6172) volatile unsigned char PAN_ID0;
+__xdata __at (0x6173) volatile unsigned char PAN_ID1;
+__xdata __at (0x6174) volatile unsigned char SHORT_ADDR0;
+__xdata __at (0x6175) volatile unsigned char SHORT_ADDR1;
 __xdata __at (0x6180) volatile unsigned char FRMFILT0;
 __xdata __at (0x6189) volatile unsigned char FRMCTRL0;
 __xdata __at (0x618F) volatile unsigned char FREQCTRL;
@@ -51,7 +72,39 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 #define IRQ_FIFOP   0x04   /* RFIRQF0: frame available in RXFIFO */
 #define IRQ_TXDONE  0x02   /* RFIRQF1: TX complete */
 
+#define CMD_PING          0x01
+#define CMD_SET_CHANNEL   0x02
+#define CMD_TX            0x03
+#define CMD_SET_PROMISC   0x04
+#define CMD_SET_ADDR      0x05
+#define CMD_SET_MAC       0x06
+#define CMD_GET_MAC       0x07
+#define CMD_TX_ADV        0x08
+#define CMD_SET_TX_POWER  0x09
+
+#define RSP_RESET_IND     0x80
+#define RSP_PONG          0x81
+#define RSP_OK            0x82
+#define RSP_TXSTAT        0x83
+#define RSP_RX_FRAME      0x84
+#define RSP_MAC_INFO      0x85
+
+#define MAC_FLAG_FILTER   0x01
+#define MAC_FLAG_AUTOACK  0x02
+#define MAC_FLAG_CCA_TX   0x04
+
+#define FRMCTRL0_AUTOACK  0x20
+#define FRMCTRL0_AUTOCRC  0x40
+
+#define STROBE_SRXON      0xE3
+#define STROBE_STXON      0xE9
+#define STROBE_STXONCCA   0xEA
+#define STROBE_SFLUSHRX   0xED
+#define STROBE_SFLUSHTX   0xEE
+
 static __xdata unsigned char rxbuf[140];
+static unsigned char mac_flags = 0;
+static unsigned char tx_retries = 0;
 
 static void clock_init(void){
   CLKCONCMD = 0x80;                 /* 32 MHz XOSC, 32 kHz RC */
@@ -67,39 +120,66 @@ static void utx(unsigned char c){ U0DBUF=c; while(!(U0CSR & 0x02)){} U0CSR &= ~0
 static unsigned char urx_avail(void){ return U0CSR & 0x04; }
 static unsigned char urx(void){ while(!(U0CSR & 0x04)){} return U0DBUF; }
 
+static void apply_mac(void){
+  FRMFILT0 = (mac_flags & MAC_FLAG_FILTER) ? 0x01 : 0x00;
+  FRMCTRL0 = (unsigned char)(FRMCTRL0_AUTOCRC |
+             ((mac_flags & MAC_FLAG_AUTOACK) ? FRMCTRL0_AUTOACK : 0x00));
+}
+
+static void set_address(__xdata unsigned char* d){
+  PAN_ID0=d[0]; PAN_ID1=d[1];
+  SHORT_ADDR0=d[2]; SHORT_ADDR1=d[3];
+  EXT_ADDR0=d[4]; EXT_ADDR1=d[5]; EXT_ADDR2=d[6]; EXT_ADDR3=d[7];
+  EXT_ADDR4=d[8]; EXT_ADDR5=d[9]; EXT_ADDR6=d[10]; EXT_ADDR7=d[11];
+}
+
 static void radio_init(unsigned char ch){
-  FRMCTRL0=0x40;                    /* AUTOCRC */
-  FRMFILT0=0x00;                    /* promiscuous: receive all frames */
+  apply_mac();
   TXFILTCFG=0x09; AGCCTRL1=0x15; FSCAL1=0x00; RXCTRL=0x3F; FSCTRL=0x55;
   ADCTEST0=0x10; ADCTEST1=0x0E; ADCTEST2=0x03;
   if(ch<11) ch=11; if(ch>26) ch=26;
   FREQCTRL=(unsigned char)(11 + 5*(ch-11));
   TXPOWER=0xF5;
-  RFST=0xED;                        /* flush RX */
-  RFST=0xE3;                        /* SRXON: enter RX */
+  RFST=STROBE_SFLUSHRX;             /* flush RX */
+  RFST=STROBE_SRXON;                /* enter RX */
 }
-/* transmit psdu[len]; radio appends FCS. returns 0 ok / 1 fail */
-static unsigned char radio_tx(__xdata unsigned char* psdu, unsigned char len){
+
+/* transmit psdu[len]; radio appends FCS. returns 0 ok / 1 fail / 2 bad len */
+static unsigned char radio_tx_once(__xdata unsigned char* psdu, unsigned char len){
   unsigned int t; unsigned char i, done=0;
-  RFST=0xEE;                        /* flush TX FIFO */
+  if(len>125) return 2;
+  RFST=STROBE_SFLUSHTX;             /* flush TX FIFO */
   RFD=(unsigned char)(len+2);       /* PHR = psdu + 2 FCS */
   for(i=0;i<len;i++) RFD=psdu[i];
   RFIRQF1=0;
-  RFST=0xE9;                        /* STXON */
+  RFST=(mac_flags & MAC_FLAG_CCA_TX) ? STROBE_STXONCCA : STROBE_STXON;
   for(t=0;t<60000;t++){ if(RFIRQF1 & IRQ_TXDONE){ done=1; break; } }
-  RFST=0xE3;                        /* back to RX */
+  RFST=STROBE_SRXON;                /* back to RX */
   return done?0:1;
 }
+static unsigned char radio_tx(__xdata unsigned char* psdu, unsigned char len,
+                              unsigned char retries, unsigned char* attempts){
+  unsigned char r=1, i, max_attempts;
+  if(len>125){ *attempts=0; return 2; }
+  max_attempts=(unsigned char)(retries+1);
+  for(i=0;i<max_attempts;i++){
+    r=radio_tx_once(psdu,len);
+    *attempts=(unsigned char)(i+1);
+    if(r==0) return 0;
+  }
+  return r;
+}
+
 /* poll RXFIFO; if a frame is present read it into rxbuf, return its length (incl
    2 trailing status bytes RSSI,CRC|LQI), else 0 */
 static unsigned char radio_rx(void){
   unsigned char len, i;
   if(!(RFIRQF0 & IRQ_FIFOP)) return 0;
   len = RFD;                        /* first FIFO byte = frame length */
-  if(len==0 || len>127){ RFST=0xED; RFIRQF0=0; return 0; }  /* bad -> flush */
+  if(len==0 || len>127){ RFST=STROBE_SFLUSHRX; RFIRQF0=0; return 0; }
   for(i=0;i<len;i++) rxbuf[i]=RFD;  /* psdu + RSSI + (CRC|LQI) */
   RFIRQF0=0;
-  if(RXFIFOCNT==0){} else { RFST=0xED; }   /* drain leftovers */
+  if(RXFIFOCNT==0){} else { RFST=STROBE_SFLUSHRX; }   /* drain leftovers */
   return len;
 }
 static void send_frame(unsigned char resp, __xdata unsigned char* d, unsigned char n){
@@ -113,19 +193,23 @@ static void send_frame(unsigned char resp, __xdata unsigned char* d, unsigned ch
 void main(void){
   __xdata unsigned char cmd[140];
   unsigned char st=0, ln=0, idx=0, c, rlen;
-  __xdata unsigned char tmp[3];
+  __xdata unsigned char tmp[16];
   clock_init();
   uart_init();
+  { __xdata unsigned char a[12] =
+      {0xFF,0xFF,0xFF,0xFF,0,0,0,0,0,0,0,0};
+    set_address(a);
+  }
   radio_init(11);
   tmp[0]=FW_VER_HI; tmp[1]=FW_VER_LO;
-  send_frame(0x80, tmp, 2);         /* RESET_IND boot announce */
+  send_frame(RSP_RESET_IND, tmp, 2);
   for(;;){
     /* radio RX -> host */
     rlen = radio_rx();
     if(rlen >= 2){
       /* report: 0x84 [rssi][crc|lqi][psdu...]  (psdu = rxbuf[0..rlen-3]) */
-      utx(0xFE); utx((unsigned char)(rlen+1)); utx(0x84);
-      { unsigned char i, fcs=(unsigned char)((rlen+1)^0x84);
+      utx(0xFE); utx((unsigned char)(rlen+1)); utx(RSP_RX_FRAME);
+      { unsigned char i, fcs=(unsigned char)((rlen+1)^RSP_RX_FRAME);
         utx(rxbuf[rlen-2]); fcs^=rxbuf[rlen-2];     /* RSSI */
         utx(rxbuf[rlen-1]); fcs^=rxbuf[rlen-1];     /* CRC|LQI */
         for(i=0;i+2<rlen;i++){ utx(rxbuf[i]); fcs^=rxbuf[i]; }
@@ -141,11 +225,50 @@ void main(void){
         case 2:
           cmd[idx++]=c;
           if(idx>=ln+1){                 /* got LEN payload bytes + FCS */
-            unsigned char cc=cmd[0];
-            if(cc==0x01){ tmp[0]=FW_VER_HI; tmp[1]=FW_VER_LO; send_frame(0x81,tmp,2); }
-            else if(cc==0x02){ radio_init(cmd[1]); tmp[0]=0; send_frame(0x82,tmp,0); }
-            else if(cc==0x03){ unsigned char r=radio_tx(&cmd[1],(unsigned char)(ln-1)); tmp[0]=r; send_frame(0x83,tmp,1); }
-            else if(cc==0x04){ FRMFILT0 = cmd[1]?0x01:0x00; tmp[0]=0; send_frame(0x82,tmp,0); }
+            unsigned char cc=cmd[0], i, good=ln;
+            for(i=0;i<ln;i++) good^=cmd[i];
+            if(good==cmd[ln]){
+              if(cc==CMD_PING){
+                tmp[0]=FW_VER_HI; tmp[1]=FW_VER_LO; send_frame(RSP_PONG,tmp,2);
+              }
+              else if(cc==CMD_SET_CHANNEL && ln>=2){
+                radio_init(cmd[1]); send_frame(RSP_OK,tmp,0);
+              }
+              else if(cc==CMD_TX){
+                unsigned char attempts=0;
+                unsigned char r=radio_tx(&cmd[1],(unsigned char)(ln-1),tx_retries,&attempts);
+                tmp[0]=r; tmp[1]=attempts; send_frame(RSP_TXSTAT,tmp,2);
+              }
+              else if(cc==CMD_SET_PROMISC && ln>=2){
+                if(cmd[1]) mac_flags |= MAC_FLAG_FILTER;
+                else mac_flags &= (unsigned char)~MAC_FLAG_FILTER;
+                apply_mac(); send_frame(RSP_OK,tmp,0);
+              }
+              else if(cc==CMD_SET_ADDR && ln>=13){
+                set_address(&cmd[1]); send_frame(RSP_OK,tmp,0);
+              }
+              else if(cc==CMD_SET_MAC && ln>=3){
+                mac_flags=(unsigned char)(cmd[1] & (MAC_FLAG_FILTER|MAC_FLAG_AUTOACK|MAC_FLAG_CCA_TX));
+                tx_retries=cmd[2];
+                apply_mac(); send_frame(RSP_OK,tmp,0);
+              }
+              else if(cc==CMD_GET_MAC){
+                tmp[0]=mac_flags; tmp[1]=tx_retries;
+                tmp[2]=PAN_ID0; tmp[3]=PAN_ID1;
+                tmp[4]=SHORT_ADDR0; tmp[5]=SHORT_ADDR1;
+                tmp[6]=EXT_ADDR0; tmp[7]=EXT_ADDR1; tmp[8]=EXT_ADDR2; tmp[9]=EXT_ADDR3;
+                tmp[10]=EXT_ADDR4; tmp[11]=EXT_ADDR5; tmp[12]=EXT_ADDR6; tmp[13]=EXT_ADDR7;
+                send_frame(RSP_MAC_INFO,tmp,14);
+              }
+              else if(cc==CMD_TX_ADV && ln>=2){
+                unsigned char attempts=0;
+                unsigned char r=radio_tx(&cmd[2],(unsigned char)(ln-2),cmd[1],&attempts);
+                tmp[0]=r; tmp[1]=attempts; send_frame(RSP_TXSTAT,tmp,2);
+              }
+              else if(cc==CMD_SET_TX_POWER && ln>=2){
+                TXPOWER=cmd[1]; send_frame(RSP_OK,tmp,0);
+              }
+            }
             st=0;
           }
           break;

@@ -7,9 +7,10 @@
   hardware UART (Serial1 by default) at 115200 baud using a small framed protocol;
   the CC2530 does the actual 2.4 GHz IEEE 802.15.4 PHY/MAC.
 
-  This is raw 802.15.4 (send/receive PHY frames, promiscuous sniffing), not a full
-  Zigbee PRO stack - perfect for custom links, sniffers, and exercising the radio.
-  A future Z-Stack-backed driver can sit beside this one (see ZigbeeModule.h).
+  This is a small 802.15.4 MAC/PHY helper, not a full Zigbee PRO stack: it can
+  set hardware PAN/address filtering, Auto ACK, CCA TX, and retries, while the
+  nRF host still owns NWK/APS/ZCL behavior. A future Z-Stack-backed driver can
+  sit beside this one (see ZigbeeModule.h).
 
   Wiring and how to flash the CC2530 firmware (using ArduinoNRF's built-in
   CC-Debugger) are documented in docs/WIRING.md and docs/FLASHING.md.
@@ -49,10 +50,21 @@ typedef void (*CC2530ZclCallback)(const MacDataFrame& mac,
                                   const ZclFrame& zcl, int8_t rssi,
                                   uint8_t lqi);
 
+struct CC2530MacInfo {
+  uint8_t flags;
+  uint8_t retries;
+  uint16_t panId;
+  uint16_t shortAddress;
+  uint8_t ieeeAddress[8];
+};
+
 class CC2530Radio {
  public:
   /** Largest 802.15.4 payload we accept (127-byte PHY frame minus 2-byte FCS). */
   static const uint8_t kMaxPayload = 125;
+  static const uint8_t kMacFilter = 0x01;
+  static const uint8_t kMacAutoAck = 0x02;
+  static const uint8_t kMacCcaTx = 0x04;
 
   /** @param serial the UART wired to the module (Serial1 = D0/D1 on ProMicro). */
   explicit CC2530Radio(HardwareSerial& serial = Serial1);
@@ -79,8 +91,26 @@ class CC2530Radio {
    */
   bool setPromiscuous(bool on);
 
+  /** Program the CC2530 hardware PAN/short/IEEE address registers. */
+  bool setAddress(uint16_t panId, uint16_t shortAddress,
+                  const uint8_t ieeeAddress[8]);
+
+  /** Configure low-level MAC assist flags and default TX retry count. */
+  bool configureMac(uint8_t flags, uint8_t retries = 0);
+
+  /** Read back the low-level MAC assist configuration from the CC2530. */
+  bool getMacInfo(CC2530MacInfo& info);
+
+  /** Set the raw CC2530 TXPOWER register value. */
+  bool setTxPowerRaw(uint8_t txpower);
+
   /** Transmit a raw 802.15.4 frame (the radio appends the FCS). @return true on TXDONE. */
   bool send(const uint8_t* payload, uint8_t len);
+
+  /** Transmit once with a per-call retry count, leaving the default retry count unchanged. */
+  bool sendWithRetries(const uint8_t* payload, uint8_t len, uint8_t retries);
+
+  uint8_t lastTxAttempts() const { return lastTxAttempts_; }
 
   /** Transmit a short-address IEEE 802.15.4 data frame. */
   bool sendData(uint16_t panId, uint16_t dstShort, uint16_t srcShort,
@@ -146,12 +176,13 @@ class CC2530Radio {
   uint8_t nwkSequence_;
   uint8_t apsCounter_;
   uint8_t zclSequence_;
+  uint8_t lastTxAttempts_;
 
   // incoming-frame parser
   uint8_t state_, len_, idx_, fcs_;
   uint8_t buf_[140];
   // captured command response (non-0x84 frames), consumed by waitResp()
-  uint8_t respCmd_, respData_[8], respLen_;
+  uint8_t respCmd_, respData_[16], respLen_;
   bool respReady_;
 
   void sendFrame(uint8_t cmd, const uint8_t* data, uint8_t n);
