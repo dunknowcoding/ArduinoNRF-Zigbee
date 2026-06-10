@@ -20,6 +20,8 @@
 #include <Arduino.h>
 #include "../../ZigbeeMac.h"
 #include "../../ZigbeeNwk.h"
+#include "../../ZigbeeAps.h"
+#include "../../ZigbeeZcl.h"
 
 namespace nzb {
 
@@ -36,6 +38,15 @@ typedef void (*CC2530DataCallback)(const MacDataFrame& frame, int8_t rssi,
                                    uint8_t lqi);
 typedef void (*CC2530NwkCallback)(const MacDataFrame& mac,
                                   const NwkDataFrame& nwk, int8_t rssi,
+                                  uint8_t lqi);
+typedef void (*CC2530ApsCallback)(const MacDataFrame& mac,
+                                  const NwkDataFrame& nwk,
+                                  const ApsDataFrame& aps, int8_t rssi,
+                                  uint8_t lqi);
+typedef void (*CC2530ZclCallback)(const MacDataFrame& mac,
+                                  const NwkDataFrame& nwk,
+                                  const ApsDataFrame& aps,
+                                  const ZclFrame& zcl, int8_t rssi,
                                   uint8_t lqi);
 
 class CC2530Radio {
@@ -83,6 +94,27 @@ class CC2530Radio {
                    uint8_t radius = ZigbeeNwk::kDefaultRadius,
                    bool ackRequest = false);
 
+  /** Transmit a simple Zigbee APS data frame inside a NWK data frame. */
+  bool sendApsData(uint16_t panId, uint16_t macDstShort, uint16_t macSrcShort,
+                   uint16_t nwkDstShort, uint16_t nwkSrcShort,
+                   uint8_t dstEndpoint, uint16_t clusterId,
+                   uint16_t profileId, uint8_t srcEndpoint,
+                   const uint8_t* payload, uint8_t len,
+                   uint8_t radius = ZigbeeNwk::kDefaultRadius,
+                   bool ackRequest = false);
+
+  /** Transmit a simple ZCL command inside APS/NWK/MAC data frames. */
+  bool sendZclCommand(uint16_t panId, uint16_t macDstShort,
+                      uint16_t macSrcShort, uint16_t nwkDstShort,
+                      uint16_t nwkSrcShort, uint8_t dstEndpoint,
+                      uint16_t clusterId, uint16_t profileId,
+                      uint8_t srcEndpoint, uint8_t commandId,
+                      const uint8_t* payload = nullptr, uint8_t len = 0,
+                      uint8_t zclFrameType = ZCL_FRAME_CLUSTER_SPECIFIC,
+                      uint8_t zclDirection = ZCL_DIRECTION_CLIENT_TO_SERVER,
+                      uint8_t radius = ZigbeeNwk::kDefaultRadius,
+                      bool ackRequest = false);
+
   /** Register the received-frame callback (delivered from poll()). */
   void onReceive(CC2530RxCallback cb) { rxCb_ = cb; }
 
@@ -92,6 +124,12 @@ class CC2530Radio {
   /** Register a parsed Zigbee NWK data-frame callback (delivered from poll()). */
   void onNwkReceive(CC2530NwkCallback cb) { nwkCb_ = cb; }
 
+  /** Register a parsed Zigbee APS data-frame callback (delivered from poll()). */
+  void onApsReceive(CC2530ApsCallback cb) { apsCb_ = cb; }
+
+  /** Register a parsed ZCL command callback (delivered from poll()). */
+  void onZclReceive(CC2530ZclCallback cb) { zclCb_ = cb; }
+
   /** Pump the UART and deliver any received frames. Call often from loop(). */
   void poll();
 
@@ -100,10 +138,14 @@ class CC2530Radio {
   CC2530RxCallback rxCb_;
   CC2530DataCallback dataCb_;
   CC2530NwkCallback nwkCb_;
+  CC2530ApsCallback apsCb_;
+  CC2530ZclCallback zclCb_;
   uint16_t version_;
   uint8_t channel_;
   uint8_t macSequence_;
   uint8_t nwkSequence_;
+  uint8_t apsCounter_;
+  uint8_t zclSequence_;
 
   // incoming-frame parser
   uint8_t state_, len_, idx_, fcs_;

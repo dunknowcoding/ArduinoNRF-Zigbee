@@ -11,10 +11,16 @@ IEEE802154Radio	KEYWORD1
 CC2530RxCallback	KEYWORD1
 CC2530DataCallback	KEYWORD1
 CC2530NwkCallback	KEYWORD1
+CC2530ApsCallback	KEYWORD1
+CC2530ZclCallback	KEYWORD1
 MacDataFrame	KEYWORD1
 NwkDataFrame	KEYWORD1
+ApsDataFrame	KEYWORD1
+ZclFrame	KEYWORD1
 ZigbeeMac	KEYWORD1
 ZigbeeNwk	KEYWORD1
+ZigbeeAps	KEYWORD1
+ZigbeeZcl	KEYWORD1
 
 #######################################
 # Methods and Functions (KEYWORD2)
@@ -29,14 +35,20 @@ setPromiscuous	KEYWORD2
 send	KEYWORD2
 sendData	KEYWORD2
 sendNwkData	KEYWORD2
+sendApsData	KEYWORD2
+sendZclCommand	KEYWORD2
 onReceive	KEYWORD2
 onDataReceive	KEYWORD2
 onNwkReceive	KEYWORD2
+onApsReceive	KEYWORD2
+onZclReceive	KEYWORD2
 poll	KEYWORD2
 buildShortDataFrame	KEYWORD2
 parseShortDataFrame	KEYWORD2
 buildDataFrame	KEYWORD2
 parseDataFrame	KEYWORD2
+buildCommandFrame	KEYWORD2
+parseFrame	KEYWORD2
 
 #######################################
 # Constants (LITERAL1)
@@ -51,3 +63,8 @@ kBaseHeaderLen	LITERAL1
 kDefaultRadius	LITERAL1
 kBroadcastRxOnWhenIdle	LITERAL1
 kBroadcastAllRouters	LITERAL1
+kProfileHomeAutomation	LITERAL1
+kProfileZigbeeDevice	LITERAL1
+kClusterBasic	LITERAL1
+kClusterOnOff	LITERAL1
+kClusterLevelControl	LITERAL1

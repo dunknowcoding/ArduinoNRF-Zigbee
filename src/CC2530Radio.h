@@ -16,9 +16,15 @@ using nzb::CC2530Radio;
 using nzb::CC2530RxCallback;
 using nzb::CC2530DataCallback;
 using nzb::CC2530NwkCallback;
+using nzb::CC2530ApsCallback;
+using nzb::CC2530ZclCallback;
 using nzb::MacDataFrame;
 using nzb::NwkDataFrame;
+using nzb::ApsDataFrame;
+using nzb::ZclFrame;
 using nzb::ZigbeeMac;
 using nzb::ZigbeeNwk;
+using nzb::ZigbeeAps;
+using nzb::ZigbeeZcl;
 
 #endif  // ARDUINONRF_ZIGBEE_PUBLIC_CC2530RADIO_H

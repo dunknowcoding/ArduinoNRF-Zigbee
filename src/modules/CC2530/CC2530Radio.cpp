@@ -23,7 +23,8 @@ const int16_t RSSI_OFFSET = 73;
 
 CC2530Radio::CC2530Radio(HardwareSerial& serial)
     : serial_(&serial), rxCb_(nullptr), dataCb_(nullptr), nwkCb_(nullptr),
-      version_(0), channel_(11), macSequence_(0), nwkSequence_(0),
+      apsCb_(nullptr), zclCb_(nullptr), version_(0), channel_(11),
+      macSequence_(0), nwkSequence_(0), apsCounter_(0), zclSequence_(0),
       state_(0), len_(0), idx_(0), fcs_(0),
       respCmd_(0), respLen_(0), respReady_(false) {}
 
@@ -69,16 +70,32 @@ void CC2530Radio::feed(uint8_t b) {
           if (rxCb_) {
             rxCb_(psdu, psduLen, rssi, lqi);
           }
-          if (dataCb_ || nwkCb_) {
+          if (dataCb_ || nwkCb_ || apsCb_ || zclCb_) {
             MacDataFrame frame;
             if (ZigbeeMac::parseShortDataFrame(psdu, psduLen, frame)) {
               if (dataCb_) {
                 dataCb_(frame, rssi, lqi);
               }
-              if (nwkCb_) {
+              if (nwkCb_ || apsCb_ || zclCb_) {
                 NwkDataFrame nwk;
                 if (ZigbeeNwk::parseDataFrame(frame.payload, frame.payloadLen, nwk)) {
-                  nwkCb_(frame, nwk, rssi, lqi);
+                  if (nwkCb_) {
+                    nwkCb_(frame, nwk, rssi, lqi);
+                  }
+                  if (apsCb_ || zclCb_) {
+                    ApsDataFrame aps;
+                    if (ZigbeeAps::parseDataFrame(nwk.payload, nwk.payloadLen, aps)) {
+                      if (apsCb_) {
+                        apsCb_(frame, nwk, aps, rssi, lqi);
+                      }
+                      if (zclCb_) {
+                        ZclFrame zcl;
+                        if (ZigbeeZcl::parseFrame(aps.payload, aps.payloadLen, zcl)) {
+                          zclCb_(frame, nwk, aps, zcl, rssi, lqi);
+                        }
+                      }
+                    }
+                  }
                 }
               }
             }
@@ -189,6 +206,41 @@ bool CC2530Radio::sendNwkData(uint16_t panId, uint16_t macDstShort,
       payload, len);
   if (npduLen == 0) return false;
   return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
+}
+
+bool CC2530Radio::sendApsData(uint16_t panId, uint16_t macDstShort,
+                              uint16_t macSrcShort, uint16_t nwkDstShort,
+                              uint16_t nwkSrcShort, uint8_t dstEndpoint,
+                              uint16_t clusterId, uint16_t profileId,
+                              uint8_t srcEndpoint, const uint8_t* payload,
+                              uint8_t len, uint8_t radius,
+                              bool ackRequest) {
+  uint8_t apdu[ZigbeeAps::kMaxFrame];
+  uint8_t apduLen = ZigbeeAps::buildDataFrame(
+      apdu, sizeof(apdu), dstEndpoint, clusterId, profileId, srcEndpoint,
+      apsCounter_++, payload, len);
+  if (apduLen == 0) return false;
+  return sendNwkData(panId, macDstShort, macSrcShort, nwkDstShort, nwkSrcShort,
+                     apdu, apduLen, radius, ackRequest);
+}
+
+bool CC2530Radio::sendZclCommand(uint16_t panId, uint16_t macDstShort,
+                                 uint16_t macSrcShort, uint16_t nwkDstShort,
+                                 uint16_t nwkSrcShort, uint8_t dstEndpoint,
+                                 uint16_t clusterId, uint16_t profileId,
+                                 uint8_t srcEndpoint, uint8_t commandId,
+                                 const uint8_t* payload, uint8_t len,
+                                 uint8_t zclFrameType,
+                                 uint8_t zclDirection, uint8_t radius,
+                                 bool ackRequest) {
+  uint8_t zcl[ZigbeeZcl::kMaxFrame];
+  uint8_t zclLen = ZigbeeZcl::buildCommandFrame(
+      zcl, sizeof(zcl), zclFrameType, zclSequence_++, commandId, payload, len,
+      zclDirection);
+  if (zclLen == 0) return false;
+  return sendApsData(panId, macDstShort, macSrcShort, nwkDstShort, nwkSrcShort,
+                     dstEndpoint, clusterId, profileId, srcEndpoint, zcl,
+                     zclLen, radius, ackRequest);
 }
 
 void CC2530Radio::poll() {

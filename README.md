@@ -57,6 +57,7 @@ alongside the ArduinoNRF core.
    - **CC2530_Link** — a two-node radio link (flash onto two setups)
    - **CC2530_MacLink** — a two-node short-address MAC data-frame link
    - **CC2530_NwkLink** — a two-node Zigbee NWK data-frame link
+   - **CC2530_ZclLink** — a two-node APS/ZCL On/Off command-frame link
 
 > Board layout note: some nice!nano-compatible bootloaders report
 > `SoftDevice: not found` in `INFO_UF2.TXT`. For those boards, select the
@@ -91,9 +92,13 @@ void loop() {
 | `send(payload, len)` | transmit a raw 802.15.4 frame (radio adds FCS) |
 | `sendData(pan, dst, src, payload, len)` | build + transmit a short-address 802.15.4 data frame |
 | `sendNwkData(pan, macDst, macSrc, nwkDst, nwkSrc, payload, len)` | build + transmit a simple Zigbee NWK data frame |
+| `sendApsData(...)` | build + transmit a simple unicast Zigbee APS data frame |
+| `sendZclCommand(...)` | build + transmit a basic ZCL command frame |
 | `onReceive(cb)` + `poll()` | deliver received frames to your callback |
 | `onDataReceive(cb)` + `poll()` | parse and deliver short-address MAC data frames |
 | `onNwkReceive(cb)` + `poll()` | parse and deliver simple Zigbee NWK data frames |
+| `onApsReceive(cb)` + `poll()` | parse and deliver simple Zigbee APS data frames |
+| `onZclReceive(cb)` + `poll()` | parse and deliver basic ZCL command frames |
 
 `send()` carries **raw 802.15.4** payloads — perfect for CC2530↔CC2530 links and
 sniffing. Talking to real Zigbee devices needs a proper MAC header (and, for full
@@ -109,6 +114,12 @@ that future NWK / APS / ZCL code can build on.
 NWK data frame with destination/source short address, radius, sequence number,
 and payload. Optional NWK fields such as security, multicast, source routing,
 and IEEE address extension are intentionally not accepted by this helper yet.
+
+`sendApsData()` / `sendZclCommand()` add unicast APS endpoint/profile/cluster
+framing and basic ZCL command-frame construction. They are useful for exercising
+frame layout and application-layer parsing between two library nodes; they do
+not implement Zigbee device discovery, binding, reporting, attribute storage, or
+cluster behavior.
 
 `begin()` also resynchronizes the CC2530 firmware's framed UART parser before
 the first ping. This matters after host uploads/resets because the CC2530 may
@@ -128,6 +139,8 @@ CC2530 module:
   filters received frames by PAN ID / destination short address in the sketch.
 - `CC2530_NwkLink` wraps those MAC frames with simple Zigbee NWK data frames and
   shows reciprocal `NWK RX ... payload="nwk hello N"` traffic on channel 11.
+- `CC2530_ZclLink` wraps ZCL On/Off Toggle command frames inside APS/NWK/MAC and
+  shows reciprocal `ZCL RX ... cmd=0x02` traffic on channel 11.
 - Because the examples use promiscuous receive mode, unrelated 802.15.4 traffic
   on the channel can appear as noisy frames; the `hello N` payloads are the link
   confirmation.
@@ -135,11 +148,11 @@ CC2530 module:
 ## Current stack boundary
 
 NiusZigbee currently implements a raw IEEE 802.15.4 CC2530 backend plus small
-short-address MAC and Zigbee NWK data-frame helpers, not a full Zigbee PRO
-stack. Missing full-stack pieces include APS/ZDO, coordinator / router /
-end-device join flows, ZCL endpoints and clusters, binding/groups, reporting,
-Trust Center behavior, install codes, and Zigbee security. A future ZNP /
-Z-Stack backend can live beside the raw driver. See
+short-address MAC, Zigbee NWK/APS data-frame, and basic ZCL command-frame
+helpers, not a full Zigbee PRO stack. Missing full-stack pieces include ZDO,
+coordinator / router / end-device join flows, real ZCL cluster behavior,
+binding/groups, reporting, Trust Center behavior, install codes, and Zigbee
+security. A future ZNP / Z-Stack backend can live beside the raw driver. See
 [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules
