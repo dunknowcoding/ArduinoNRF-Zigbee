@@ -54,8 +54,9 @@ alongside the ArduinoNRF core.
 3. **Use it** — open one of:
    - **CC2530_Info** — confirm the link, read the firmware version
    - **CC2530_Sniffer** — promiscuous 802.15.4 packet sniffer
-   - **CC2530_Link** — a two‑node radio link (flash onto two setups)
+   - **CC2530_Link** — a two-node radio link (flash onto two setups)
    - **CC2530_MacLink** — a two-node short-address MAC data-frame link
+   - **CC2530_NwkLink** — a two-node Zigbee NWK data-frame link
 
 > Board layout note: some nice!nano-compatible bootloaders report
 > `SoftDevice: not found` in `INFO_UF2.TXT`. For those boards, select the
@@ -89,8 +90,10 @@ void loop() {
 | `setPromiscuous(bool)` | receive all frames (sniffer) vs filtered |
 | `send(payload, len)` | transmit a raw 802.15.4 frame (radio adds FCS) |
 | `sendData(pan, dst, src, payload, len)` | build + transmit a short-address 802.15.4 data frame |
+| `sendNwkData(pan, macDst, macSrc, nwkDst, nwkSrc, payload, len)` | build + transmit a simple Zigbee NWK data frame |
 | `onReceive(cb)` + `poll()` | deliver received frames to your callback |
 | `onDataReceive(cb)` + `poll()` | parse and deliver short-address MAC data frames |
+| `onNwkReceive(cb)` + `poll()` | parse and deliver simple Zigbee NWK data frames |
 
 `send()` carries **raw 802.15.4** payloads — perfect for CC2530↔CC2530 links and
 sniffing. Talking to real Zigbee devices needs a proper MAC header (and, for full
@@ -101,6 +104,11 @@ radio I/O: IEEE 802.15.4 data frames with PAN ID, 16-bit source/destination
 addresses, sequence number, optional ACK request, and parsed RSSI/LQI metadata.
 This is still not Zigbee PRO joining or ZCL control, but it is the MAC envelope
 that future NWK / APS / ZCL code can build on.
+
+`sendNwkData()` and `onNwkReceive()` add the next frame layer: a minimal Zigbee
+NWK data frame with destination/source short address, radius, sequence number,
+and payload. Optional NWK fields such as security, multicast, source routing,
+and IEEE address extension are intentionally not accepted by this helper yet.
 
 `begin()` also resynchronizes the CC2530 firmware's framed UART parser before
 the first ping. This matters after host uploads/resets because the CC2530 may
@@ -118,18 +126,21 @@ CC2530 module:
   `RX (... dBm): hello N` frames on channel 11.
 - `CC2530_MacLink` builds standards-shaped short-address MAC data frames and
   filters received frames by PAN ID / destination short address in the sketch.
+- `CC2530_NwkLink` wraps those MAC frames with simple Zigbee NWK data frames and
+  shows reciprocal `NWK RX ... payload="nwk hello N"` traffic on channel 11.
 - Because the examples use promiscuous receive mode, unrelated 802.15.4 traffic
   on the channel can appear as noisy frames; the `hello N` payloads are the link
   confirmation.
 
 ## Current stack boundary
 
-NiusZigbee currently implements a raw IEEE 802.15.4 CC2530 backend plus a small
-short-address MAC data-frame helper, not a full Zigbee PRO stack. Missing
-full-stack pieces include NWK/APS/ZDO, coordinator / router / end-device join
-flows, ZCL endpoints and clusters, binding/groups, reporting, Trust Center
-behavior, install codes, and Zigbee security. A future ZNP / Z-Stack backend can
-live beside the raw driver. See [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
+NiusZigbee currently implements a raw IEEE 802.15.4 CC2530 backend plus small
+short-address MAC and Zigbee NWK data-frame helpers, not a full Zigbee PRO
+stack. Missing full-stack pieces include APS/ZDO, coordinator / router /
+end-device join flows, ZCL endpoints and clusters, binding/groups, reporting,
+Trust Center behavior, install codes, and Zigbee security. A future ZNP /
+Z-Stack backend can live beside the raw driver. See
+[docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules
 

@@ -22,8 +22,8 @@ const int16_t RSSI_OFFSET = 73;
 }  // namespace
 
 CC2530Radio::CC2530Radio(HardwareSerial& serial)
-    : serial_(&serial), rxCb_(nullptr), dataCb_(nullptr), version_(0), channel_(11),
-      macSequence_(0),
+    : serial_(&serial), rxCb_(nullptr), dataCb_(nullptr), nwkCb_(nullptr),
+      version_(0), channel_(11), macSequence_(0), nwkSequence_(0),
       state_(0), len_(0), idx_(0), fcs_(0),
       respCmd_(0), respLen_(0), respReady_(false) {}
 
@@ -69,10 +69,18 @@ void CC2530Radio::feed(uint8_t b) {
           if (rxCb_) {
             rxCb_(psdu, psduLen, rssi, lqi);
           }
-          if (dataCb_) {
+          if (dataCb_ || nwkCb_) {
             MacDataFrame frame;
             if (ZigbeeMac::parseShortDataFrame(psdu, psduLen, frame)) {
-              dataCb_(frame, rssi, lqi);
+              if (dataCb_) {
+                dataCb_(frame, rssi, lqi);
+              }
+              if (nwkCb_) {
+                NwkDataFrame nwk;
+                if (ZigbeeNwk::parseDataFrame(frame.payload, frame.payloadLen, nwk)) {
+                  nwkCb_(frame, nwk, rssi, lqi);
+                }
+              }
             }
           }
         }
@@ -168,6 +176,19 @@ bool CC2530Radio::sendData(uint16_t panId, uint16_t dstShort, uint16_t srcShort,
       payload, len, ackRequest);
   if (psduLen == 0) return false;
   return send(psdu, psduLen);
+}
+
+bool CC2530Radio::sendNwkData(uint16_t panId, uint16_t macDstShort,
+                              uint16_t macSrcShort, uint16_t nwkDstShort,
+                              uint16_t nwkSrcShort, const uint8_t* payload,
+                              uint8_t len, uint8_t radius,
+                              bool ackRequest) {
+  uint8_t npdu[ZigbeeNwk::kMaxFrame];
+  uint8_t npduLen = ZigbeeNwk::buildDataFrame(
+      npdu, sizeof(npdu), nwkDstShort, nwkSrcShort, radius, nwkSequence_++,
+      payload, len);
+  if (npduLen == 0) return false;
+  return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
 }
 
 void CC2530Radio::poll() {

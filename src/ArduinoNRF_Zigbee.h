@@ -16,10 +16,11 @@
 #ifndef ARDUINONRF_ZIGBEE_H
 #define ARDUINONRF_ZIGBEE_H
 
-#define ARDUINONRF_ZIGBEE_VERSION "0.1.3"
+#define ARDUINONRF_ZIGBEE_VERSION "0.1.4"
 
 #include "ZigbeeModule.h"
 #include "ZigbeeMac.h"
+#include "ZigbeeNwk.h"
 #include "CC2530Radio.h"
 
 #endif  // ARDUINONRF_ZIGBEE_H

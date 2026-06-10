@@ -34,6 +34,13 @@ run TI Z-Stack or Zigbee PRO internally.
 - `CC2530Radio::sendData()`
 - `CC2530Radio::onDataReceive()`
 - `examples/CC2530_MacLink`
+- `ZigbeeNwk::buildDataFrame()`
+- `ZigbeeNwk::parseDataFrame()`
+- `CC2530Radio::sendNwkData()`
+- `CC2530Radio::onNwkReceive()`
+- `examples/CC2530_NwkLink`
 
-This gives the library a real MAC envelope while preserving the existing raw
-send / receive / sniffer APIs.
+This gives the library a real MAC envelope and a minimal Zigbee NWK data-frame
+layer while preserving the existing raw send / receive / sniffer APIs. It is
+still not a full Zigbee PRO stack: there is no association/join, neighbor table,
+routing table, route discovery, ZDO, APS, ZCL, or Zigbee security yet.
