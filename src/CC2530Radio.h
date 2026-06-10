@@ -14,6 +14,7 @@
 #include "ZigbeeClusters.h"
 #include "ZigbeeDevice.h"
 #include "ZigbeeTables.h"
+#include "ZigbeeNetwork.h"
 #include "ZigbeeReporting.h"
 
 using nzb::CC2530Radio;
@@ -47,6 +48,10 @@ using nzb::ZigbeeNeighbor;
 using nzb::ZigbeeNeighborTable;
 using nzb::ZigbeeRoute;
 using nzb::ZigbeeRouteTable;
+using nzb::ZigbeeNetworkInfo;
+using nzb::ZigbeePermitJoin;
+using nzb::ZigbeeAddressAllocator;
+using nzb::ZigbeeNetwork;
 using nzb::ZigbeeZcl;
 using nzb::ZigbeeOnOffCluster;
 using nzb::ZigbeeBasicCluster;

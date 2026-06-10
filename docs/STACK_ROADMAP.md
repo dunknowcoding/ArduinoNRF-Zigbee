@@ -34,6 +34,9 @@ run TI Z-Stack or Zigbee PRO internally.
    - Add coordinator/router/end-device state machines on the nRF host while
      keeping CC2530 as a MAC/PHY co-processor.
    - Add neighbor/routing tables, route discovery/repair, and NWK/APS security.
+   - Add local network identity, permit-join timing, short-address allocation,
+     child acceptance, and parent bookkeeping before the over-the-air join
+     command exchange.
    - Persist network state, frame counters, bindings, reporting tables, and
      attributes in nRF flash.
 
@@ -77,6 +80,9 @@ run TI Z-Stack or Zigbee PRO internally.
 - `ZigbeeDeviceObject`
 - `ZigbeeNeighborTable`
 - `ZigbeeRouteTable`
+- `ZigbeeNetwork`
+- `ZigbeePermitJoin`
+- `ZigbeeAddressAllocator`
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`
@@ -93,8 +99,9 @@ This gives the library a real MAC envelope, a CC2530 MAC/PHY co-processor
 configuration API, a minimal Zigbee NWK data-frame layer, unicast APS, endpoint
 0 ZDO discovery payload tooling, a static local Device Object descriptor store,
 fixed neighbor/route table storage, ZCL command-frame tooling, and tiny reusable
-Basic / OnOff behavior helpers with a boolean report scheduler, while preserving
-the existing raw send / receive / sniffer APIs. It is still not a full Zigbee PRO
-stack: there is no association / join, neighbor aging protocol, route discovery,
-binding, persistent reporting table, persistent attribute storage, full cluster
-library, or Zigbee security yet.
+Basic / OnOff behavior helpers with a boolean report scheduler, and local
+network-state/permit-join/address-allocation helpers, while preserving the
+existing raw send / receive / sniffer APIs. It is still not a full Zigbee PRO
+stack: there is no over-the-air association / join exchange, neighbor aging
+protocol, route discovery, binding, persistent reporting table, persistent
+attribute storage, full cluster library, or Zigbee security yet.
