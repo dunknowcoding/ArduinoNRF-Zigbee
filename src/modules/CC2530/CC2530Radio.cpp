@@ -29,7 +29,7 @@ const int16_t RSSI_OFFSET = 73;
 
 CC2530Radio::CC2530Radio(HardwareSerial& serial)
     : serial_(&serial), rxCb_(nullptr), dataCb_(nullptr), nwkCb_(nullptr),
-      apsCb_(nullptr), zclCb_(nullptr), version_(0), channel_(11),
+      apsCb_(nullptr), zdoCb_(nullptr), zclCb_(nullptr), version_(0), channel_(11),
       macSequence_(0), nwkSequence_(0), apsCounter_(0), zclSequence_(0),
       lastTxAttempts_(0),
       state_(0), len_(0), idx_(0), fcs_(0),
@@ -77,23 +77,28 @@ void CC2530Radio::feed(uint8_t b) {
           if (rxCb_) {
             rxCb_(psdu, psduLen, rssi, lqi);
           }
-          if (dataCb_ || nwkCb_ || apsCb_ || zclCb_) {
+          if (dataCb_ || nwkCb_ || apsCb_ || zdoCb_ || zclCb_) {
             MacDataFrame frame;
             if (ZigbeeMac::parseShortDataFrame(psdu, psduLen, frame)) {
               if (dataCb_) {
                 dataCb_(frame, rssi, lqi);
               }
-              if (nwkCb_ || apsCb_ || zclCb_) {
+              if (nwkCb_ || apsCb_ || zdoCb_ || zclCb_) {
                 NwkDataFrame nwk;
                 if (ZigbeeNwk::parseDataFrame(frame.payload, frame.payloadLen, nwk)) {
                   if (nwkCb_) {
                     nwkCb_(frame, nwk, rssi, lqi);
                   }
-                  if (apsCb_ || zclCb_) {
+                  if (apsCb_ || zdoCb_ || zclCb_) {
                     ApsDataFrame aps;
                     if (ZigbeeAps::parseDataFrame(nwk.payload, nwk.payloadLen, aps)) {
                       if (apsCb_) {
                         apsCb_(frame, nwk, aps, rssi, lqi);
+                      }
+                      if (zdoCb_ &&
+                          aps.profileId == ZigbeeAps::kProfileZigbeeDevice &&
+                          aps.dstEndpoint == ZigbeeZdo::kEndpoint) {
+                        zdoCb_(frame, nwk, aps, rssi, lqi);
                       }
                       if (zclCb_) {
                         ZclFrame zcl;
@@ -279,6 +284,17 @@ bool CC2530Radio::sendApsData(uint16_t panId, uint16_t macDstShort,
   if (apduLen == 0) return false;
   return sendNwkData(panId, macDstShort, macSrcShort, nwkDstShort, nwkSrcShort,
                      apdu, apduLen, radius, ackRequest);
+}
+
+bool CC2530Radio::sendZdoCommand(uint16_t panId, uint16_t macDstShort,
+                                 uint16_t macSrcShort, uint16_t nwkDstShort,
+                                 uint16_t nwkSrcShort, uint16_t clusterId,
+                                 const uint8_t* payload, uint8_t len,
+                                 uint8_t radius, bool ackRequest) {
+  return sendApsData(panId, macDstShort, macSrcShort, nwkDstShort, nwkSrcShort,
+                     ZigbeeZdo::kEndpoint, clusterId,
+                     ZigbeeAps::kProfileZigbeeDevice, ZigbeeZdo::kEndpoint,
+                     payload, len, radius, ackRequest);
 }
 
 bool CC2530Radio::sendZclCommand(uint16_t panId, uint16_t macDstShort,

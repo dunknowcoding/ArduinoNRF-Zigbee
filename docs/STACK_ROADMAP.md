@@ -23,18 +23,22 @@ run TI Z-Stack or Zigbee PRO internally.
    - Add endpoint/profile/cluster addressing and common ZCL command encoders.
    - Start with Basic, On/Off, Level Control, and reporting frame builders.
 
-4. **ZNP / Z-Stack backend**
+4. **ZDO discovery helpers**
+   - Add endpoint 0 Zigbee Device Profile payload builders/parsers.
+   - Cover address, active endpoint, simple descriptor, and match descriptor
+     discovery before joining/routing is automatic.
+
+5. **Association, join, and local tables**
+   - Add coordinator/router/end-device state machines on the nRF host while
+     keeping CC2530 as a MAC/PHY co-processor.
+   - Add neighbor/routing tables, route discovery/repair, and NWK/APS security.
+   - Persist network state, frame counters, bindings, reporting tables, and
+     attributes in nRF flash.
+
+6. **ZNP / Z-Stack backend**
    - Add a separate backend for CC2530 modules flashed with TI Z-Stack ZNP.
    - This is the path for real coordinator/router/end-device join flows,
      binding, Trust Center behavior, install codes, and Zigbee security.
-
-5. **Full SDCC Zigbee PRO path**
-   - Add association/join state machines on the nRF host while keeping CC2530 as
-     a MAC/PHY co-processor.
-   - Add neighbor/routing tables, route discovery/repair, ZDO endpoints, and
-     NWK/APS security.
-   - Persist network state, frame counters, bindings, reporting tables, and
-     attributes in nRF flash.
 
 ## Implemented in this revision
 
@@ -67,6 +71,9 @@ run TI Z-Stack or Zigbee PRO internally.
 - `CC2530Radio::setTxPowerRaw()`
 - `CC2530Radio::sendWithRetries()`
 - `CC2530Radio::sendApsData()`
+- `ZigbeeZdo`
+- `CC2530Radio::sendZdoCommand()`
+- `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`
 - `CC2530Radio::onApsReceive()`
 - `CC2530Radio::onZclReceive()`
@@ -75,12 +82,13 @@ run TI Z-Stack or Zigbee PRO internally.
 - `examples/CC2530_ClusterNode`
 - `examples/CC2530_ReportingNode`
 - `examples/CC2530_MacControl`
+- `examples/CC2530_ZdoDiscovery`
 
 This gives the library a real MAC envelope, a CC2530 MAC/PHY co-processor
-configuration API, and a minimal Zigbee NWK data-frame layer, plus unicast APS,
-ZCL command-frame tooling, and tiny reusable Basic / OnOff behavior helpers with
-a boolean report scheduler, while preserving the existing raw send / receive /
-sniffer APIs. It is still not a full Zigbee PRO stack: there is no association
-/ join, neighbor table, routing table, route discovery, ZDO, binding, persistent
-reporting table, persistent attribute storage, full cluster library, or Zigbee
-security yet.
+configuration API, a minimal Zigbee NWK data-frame layer, unicast APS, endpoint
+0 ZDO discovery payload tooling, ZCL command-frame tooling, and tiny reusable
+Basic / OnOff behavior helpers with a boolean report scheduler, while preserving
+the existing raw send / receive / sniffer APIs. It is still not a full Zigbee PRO
+stack: there is no association / join, neighbor table, routing table, route
+discovery, binding, persistent reporting table, persistent attribute storage,
+full cluster library, or Zigbee security yet.

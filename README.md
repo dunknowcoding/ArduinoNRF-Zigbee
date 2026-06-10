@@ -100,11 +100,13 @@ void loop() {
 | `sendData(pan, dst, src, payload, len)` | build + transmit a short-address 802.15.4 data frame |
 | `sendNwkData(pan, macDst, macSrc, nwkDst, nwkSrc, payload, len)` | build + transmit a simple Zigbee NWK data frame |
 | `sendApsData(...)` | build + transmit a simple unicast Zigbee APS data frame |
+| `sendZdoCommand(...)` | build + transmit a Zigbee Device Profile command on endpoint 0 |
 | `sendZclCommand(...)` | build + transmit a basic ZCL command frame |
 | `onReceive(cb)` + `poll()` | deliver received frames to your callback |
 | `onDataReceive(cb)` + `poll()` | parse and deliver short-address MAC data frames |
 | `onNwkReceive(cb)` + `poll()` | parse and deliver simple Zigbee NWK data frames |
 | `onApsReceive(cb)` + `poll()` | parse and deliver simple Zigbee APS data frames |
+| `onZdoReceive(cb)` + `poll()` | deliver endpoint 0 / profile 0 Zigbee Device Profile frames |
 | `onZclReceive(cb)` + `poll()` | parse and deliver basic ZCL command frames |
 
 `send()` carries **raw 802.15.4** payloads — perfect for CC2530↔CC2530 links and
@@ -127,6 +129,12 @@ framing and basic ZCL command-frame construction. They are useful for exercising
 frame layout and application-layer parsing between two library nodes; they do
 not implement Zigbee device discovery, binding, reporting, attribute storage, or
 cluster behavior.
+
+`ZigbeeZdo` adds the first Zigbee Device Object payload helpers for endpoint 0:
+NWK/IEEE address, Active Endpoint, Simple Descriptor, and Match Descriptor
+requests/responses. `CC2530_ZdoDiscovery` uses those helpers with CC2530
+hardware filtering and Auto ACK enabled, which is the next step from private
+two-node APS/ZCL frames toward real Zigbee PRO discovery.
 
 `ZigbeeZcl` also includes small helpers for Read Attributes payloads, Default
 Response payloads, boolean/uint8 attribute records, boolean reports, and applying
@@ -176,6 +184,10 @@ CC2530 module:
   On/Off reads.
 - `CC2530_ReportingNode` accepts Configure Reporting for OnOff.OnOff and emits
   Report Attributes on state change / max interval.
+- `CC2530_ZdoDiscovery` compiles for two nodes and board1 uploads/runs with
+  endpoint 0 discovery enabled. Board2 was not present as a connected USB serial
+  device during the final pass, so two-board ZDO RX/RSP validation should be
+  rerun after reconnecting board2.
 - Because the examples use promiscuous receive mode, unrelated 802.15.4 traffic
   on the channel can appear as noisy frames; the `hello N` payloads are the link
   confirmation.
@@ -183,14 +195,14 @@ CC2530 module:
 ## Current stack boundary
 
 NiusZigbee currently implements an SDCC CC2530 MAC/PHY backend plus small
-short-address MAC, Zigbee NWK/APS data-frame, basic ZCL command-frame helpers,
-tiny reusable Basic / OnOff behavior helpers, and a boolean report scheduler,
+short-address MAC, Zigbee NWK/APS data-frame, ZDO discovery payload helpers,
+basic ZCL command-frame helpers, tiny reusable Basic / OnOff behavior helpers,
+and a boolean report scheduler,
 not a full Zigbee PRO stack. Missing full-stack pieces include association and
-join state machines, ZDO discovery, coordinator / router / end-device roles,
-neighbor and routing tables, full ZCL cluster libraries, binding/groups,
-persistent reporting tables, Trust Center behavior, install codes, NWK/APS
-security, and Zigbee PRO route discovery/repair. A future ZNP / Z-Stack backend
-can live beside the raw driver. See
+join state machines, coordinator / router / end-device roles, neighbor and
+routing tables, full ZCL cluster libraries, binding/groups, persistent reporting
+tables, Trust Center behavior, install codes, NWK/APS security, and Zigbee PRO
+route discovery/repair. A future ZNP / Z-Stack backend can live beside the raw driver. See
 [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules

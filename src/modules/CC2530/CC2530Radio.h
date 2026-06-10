@@ -22,6 +22,7 @@
 #include "../../ZigbeeMac.h"
 #include "../../ZigbeeNwk.h"
 #include "../../ZigbeeAps.h"
+#include "../../ZigbeeZdo.h"
 #include "../../ZigbeeZcl.h"
 
 namespace nzb {
@@ -41,6 +42,10 @@ typedef void (*CC2530NwkCallback)(const MacDataFrame& mac,
                                   const NwkDataFrame& nwk, int8_t rssi,
                                   uint8_t lqi);
 typedef void (*CC2530ApsCallback)(const MacDataFrame& mac,
+                                  const NwkDataFrame& nwk,
+                                  const ApsDataFrame& aps, int8_t rssi,
+                                  uint8_t lqi);
+typedef void (*CC2530ZdoCallback)(const MacDataFrame& mac,
                                   const NwkDataFrame& nwk,
                                   const ApsDataFrame& aps, int8_t rssi,
                                   uint8_t lqi);
@@ -133,6 +138,14 @@ class CC2530Radio {
                    uint8_t radius = ZigbeeNwk::kDefaultRadius,
                    bool ackRequest = false);
 
+  /** Transmit a Zigbee Device Profile command on endpoint 0. */
+  bool sendZdoCommand(uint16_t panId, uint16_t macDstShort,
+                      uint16_t macSrcShort, uint16_t nwkDstShort,
+                      uint16_t nwkSrcShort, uint16_t clusterId,
+                      const uint8_t* payload, uint8_t len,
+                      uint8_t radius = ZigbeeNwk::kDefaultRadius,
+                      bool ackRequest = false);
+
   /** Transmit a simple ZCL command inside APS/NWK/MAC data frames. */
   bool sendZclCommand(uint16_t panId, uint16_t macDstShort,
                       uint16_t macSrcShort, uint16_t nwkDstShort,
@@ -157,6 +170,9 @@ class CC2530Radio {
   /** Register a parsed Zigbee APS data-frame callback (delivered from poll()). */
   void onApsReceive(CC2530ApsCallback cb) { apsCb_ = cb; }
 
+  /** Register a Zigbee Device Profile callback for endpoint 0/profile 0. */
+  void onZdoReceive(CC2530ZdoCallback cb) { zdoCb_ = cb; }
+
   /** Register a parsed ZCL command callback (delivered from poll()). */
   void onZclReceive(CC2530ZclCallback cb) { zclCb_ = cb; }
 
@@ -169,6 +185,7 @@ class CC2530Radio {
   CC2530DataCallback dataCb_;
   CC2530NwkCallback nwkCb_;
   CC2530ApsCallback apsCb_;
+  CC2530ZdoCallback zdoCb_;
   CC2530ZclCallback zclCb_;
   uint16_t version_;
   uint8_t channel_;
