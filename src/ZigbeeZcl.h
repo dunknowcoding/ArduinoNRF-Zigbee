@@ -26,6 +26,7 @@ enum ZclCommandId : uint8_t {
   ZCL_CMD_READ_ATTRIBUTES_RESPONSE = 0x01,
   ZCL_CMD_WRITE_ATTRIBUTES = 0x02,
   ZCL_CMD_WRITE_ATTRIBUTES_RESPONSE = 0x04,
+  ZCL_CMD_REPORT_ATTRIBUTES = 0x0A,
   ZCL_CMD_DEFAULT_RESPONSE = 0x0B
 };
 
@@ -33,6 +34,21 @@ enum ZclOnOffCommandId : uint8_t {
   ZCL_ON_OFF_CMD_OFF = 0x00,
   ZCL_ON_OFF_CMD_ON = 0x01,
   ZCL_ON_OFF_CMD_TOGGLE = 0x02
+};
+
+enum ZclStatus : uint8_t {
+  ZCL_STATUS_SUCCESS = 0x00,
+  ZCL_STATUS_UNSUPPORTED_CLUSTER_COMMAND = 0x81,
+  ZCL_STATUS_UNSUPPORTED_GENERAL_COMMAND = 0x82,
+  ZCL_STATUS_INVALID_FIELD = 0x85,
+  ZCL_STATUS_UNSUPPORTED_ATTRIBUTE = 0x86
+};
+
+enum ZclDataType : uint8_t {
+  ZCL_TYPE_BOOLEAN = 0x10,
+  ZCL_TYPE_UINT8 = 0x20,
+  ZCL_TYPE_UINT16 = 0x21,
+  ZCL_TYPE_CHAR_STRING = 0x42
 };
 
 struct ZclFrame {
@@ -57,6 +73,9 @@ class ZigbeeZcl {
   static const uint16_t kClusterBasic = 0x0000;
   static const uint16_t kClusterOnOff = 0x0006;
   static const uint16_t kClusterLevelControl = 0x0008;
+  static const uint16_t kAttrOnOff = 0x0000;
+  static const uint16_t kAttrBasicZclVersion = 0x0000;
+  static const uint16_t kAttrBasicPowerSource = 0x0007;
 
   static uint8_t buildCommandFrame(uint8_t* out, uint8_t outMax,
                                    uint8_t frameType, uint8_t sequence,
@@ -68,9 +87,43 @@ class ZigbeeZcl {
 
   static bool parseFrame(const uint8_t* zcl, uint8_t len, ZclFrame& frame);
 
+  static uint8_t buildReadAttributesPayload(uint8_t* out, uint8_t outMax,
+                                            const uint16_t* attrIds,
+                                            uint8_t attrCount);
+
+  static bool getReadAttributeId(const uint8_t* payload, uint8_t payloadLen,
+                                 uint8_t index, uint16_t& attrId);
+
+  static uint8_t buildDefaultResponsePayload(uint8_t* out, uint8_t outMax,
+                                             uint8_t commandId,
+                                             uint8_t status);
+
+  static bool parseDefaultResponsePayload(const uint8_t* payload,
+                                          uint8_t payloadLen,
+                                          uint8_t& commandId,
+                                          uint8_t& status);
+
+  static uint8_t buildAttributeStatusRecord(uint8_t* out, uint8_t outMax,
+                                            uint16_t attrId, uint8_t status);
+
+  static uint8_t buildBoolAttributeRecord(uint8_t* out, uint8_t outMax,
+                                          uint16_t attrId, bool value);
+
+  static uint8_t buildUint8AttributeRecord(uint8_t* out, uint8_t outMax,
+                                           uint16_t attrId, uint8_t value);
+
+  static uint8_t buildReportBoolAttributePayload(uint8_t* out, uint8_t outMax,
+                                                 uint16_t attrId, bool value);
+
+  static bool applyOnOffCommand(uint8_t commandId, bool& on);
+
  private:
   static uint16_t readLe16(const uint8_t* p) {
     return (uint16_t)p[0] | ((uint16_t)p[1] << 8);
+  }
+  static void writeLe16(uint8_t* p, uint16_t v) {
+    p[0] = (uint8_t)(v & 0xFF);
+    p[1] = (uint8_t)(v >> 8);
   }
 };
 

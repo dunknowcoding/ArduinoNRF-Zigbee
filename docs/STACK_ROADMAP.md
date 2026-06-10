@@ -43,15 +43,21 @@ run TI Z-Stack or Zigbee PRO internally.
 - `ZigbeeAps::parseDataFrame()`
 - `ZigbeeZcl::buildCommandFrame()`
 - `ZigbeeZcl::parseFrame()`
+- `ZigbeeZcl::buildReadAttributesPayload()`
+- `ZigbeeZcl::buildDefaultResponsePayload()`
+- `ZigbeeZcl::buildBoolAttributeRecord()`
+- `ZigbeeZcl::buildReportBoolAttributePayload()`
+- `ZigbeeZcl::applyOnOffCommand()`
 - `CC2530Radio::sendApsData()`
 - `CC2530Radio::sendZclCommand()`
 - `CC2530Radio::onApsReceive()`
 - `CC2530Radio::onZclReceive()`
 - `examples/CC2530_ZclLink`
+- `examples/CC2530_OnOffCluster`
 
 This gives the library a real MAC envelope and a minimal Zigbee NWK data-frame
 layer, plus unicast APS and basic ZCL command-frame tooling, while preserving
 the existing raw send / receive / sniffer APIs. It is still not a full Zigbee
 PRO stack: there is no association/join, neighbor table, routing table, route
-discovery, ZDO, binding, reporting, attribute storage, real cluster behavior, or
-Zigbee security yet.
+discovery, ZDO, binding, reporting configuration, persistent attribute storage,
+full cluster library, or Zigbee security yet.

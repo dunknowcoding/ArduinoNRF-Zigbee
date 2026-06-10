@@ -63,4 +63,98 @@ bool ZigbeeZcl::parseFrame(const uint8_t* zcl, uint8_t len, ZclFrame& frame) {
   return true;
 }
 
+uint8_t ZigbeeZcl::buildReadAttributesPayload(uint8_t* out, uint8_t outMax,
+                                              const uint16_t* attrIds,
+                                              uint8_t attrCount) {
+  if (!out || !attrIds || attrCount == 0) return 0;
+  if (outMax < attrCount * 2) return 0;
+  for (uint8_t i = 0; i < attrCount; ++i) {
+    writeLe16(&out[i * 2], attrIds[i]);
+  }
+  return (uint8_t)(attrCount * 2);
+}
+
+bool ZigbeeZcl::getReadAttributeId(const uint8_t* payload, uint8_t payloadLen,
+                                   uint8_t index, uint16_t& attrId) {
+  uint8_t offset = (uint8_t)(index * 2);
+  if (!payload || offset > payloadLen || payloadLen - offset < 2) return false;
+  attrId = readLe16(&payload[offset]);
+  return true;
+}
+
+uint8_t ZigbeeZcl::buildDefaultResponsePayload(uint8_t* out, uint8_t outMax,
+                                               uint8_t commandId,
+                                               uint8_t status) {
+  if (!out || outMax < 2) return 0;
+  out[0] = commandId;
+  out[1] = status;
+  return 2;
+}
+
+bool ZigbeeZcl::parseDefaultResponsePayload(const uint8_t* payload,
+                                            uint8_t payloadLen,
+                                            uint8_t& commandId,
+                                            uint8_t& status) {
+  if (!payload || payloadLen < 2) return false;
+  commandId = payload[0];
+  status = payload[1];
+  return true;
+}
+
+uint8_t ZigbeeZcl::buildAttributeStatusRecord(uint8_t* out, uint8_t outMax,
+                                              uint16_t attrId,
+                                              uint8_t status) {
+  if (!out || outMax < 3) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = status;
+  return 3;
+}
+
+uint8_t ZigbeeZcl::buildBoolAttributeRecord(uint8_t* out, uint8_t outMax,
+                                            uint16_t attrId, bool value) {
+  if (!out || outMax < 5) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = ZCL_STATUS_SUCCESS;
+  out[3] = ZCL_TYPE_BOOLEAN;
+  out[4] = value ? 1 : 0;
+  return 5;
+}
+
+uint8_t ZigbeeZcl::buildUint8AttributeRecord(uint8_t* out, uint8_t outMax,
+                                             uint16_t attrId, uint8_t value) {
+  if (!out || outMax < 5) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = ZCL_STATUS_SUCCESS;
+  out[3] = ZCL_TYPE_UINT8;
+  out[4] = value;
+  return 5;
+}
+
+uint8_t ZigbeeZcl::buildReportBoolAttributePayload(uint8_t* out,
+                                                   uint8_t outMax,
+                                                   uint16_t attrId,
+                                                   bool value) {
+  if (!out || outMax < 4) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = ZCL_TYPE_BOOLEAN;
+  out[3] = value ? 1 : 0;
+  return 4;
+}
+
+bool ZigbeeZcl::applyOnOffCommand(uint8_t commandId, bool& on) {
+  if (commandId == ZCL_ON_OFF_CMD_OFF) {
+    on = false;
+    return true;
+  }
+  if (commandId == ZCL_ON_OFF_CMD_ON) {
+    on = true;
+    return true;
+  }
+  if (commandId == ZCL_ON_OFF_CMD_TOGGLE) {
+    on = !on;
+    return true;
+  }
+  return false;
+}
+
 }  // namespace nzb
