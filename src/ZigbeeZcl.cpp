@@ -160,6 +160,70 @@ uint8_t ZigbeeZcl::buildReportBoolAttributePayload(uint8_t* out,
   return 4;
 }
 
+bool ZigbeeZcl::parseReportBoolAttributePayload(const uint8_t* payload,
+                                                uint8_t payloadLen,
+                                                uint16_t& attrId,
+                                                bool& value) {
+  if (!payload || payloadLen < 4) return false;
+  attrId = readLe16(&payload[0]);
+  if (payload[2] != ZCL_TYPE_BOOLEAN) return false;
+  value = payload[3] != 0;
+  return true;
+}
+
+uint8_t ZigbeeZcl::buildConfigureReportingBoolPayload(uint8_t* out,
+                                                      uint8_t outMax,
+                                                      uint16_t attrId,
+                                                      uint16_t minIntervalSec,
+                                                      uint16_t maxIntervalSec) {
+  if (!out || outMax < 8) return 0;
+  out[0] = ZCL_REPORT_DIRECTION_REPORTED;
+  writeLe16(&out[1], attrId);
+  out[3] = ZCL_TYPE_BOOLEAN;
+  writeLe16(&out[4], minIntervalSec);
+  writeLe16(&out[6], maxIntervalSec);
+  return 8;
+}
+
+bool ZigbeeZcl::parseConfigureReportingBoolPayload(const uint8_t* payload,
+                                                   uint8_t payloadLen,
+                                                   uint16_t& attrId,
+                                                   uint16_t& minIntervalSec,
+                                                   uint16_t& maxIntervalSec) {
+  if (!payload || payloadLen < 8) return false;
+  if (payload[0] != ZCL_REPORT_DIRECTION_REPORTED) return false;
+  if (payload[3] != ZCL_TYPE_BOOLEAN) return false;
+  attrId = readLe16(&payload[1]);
+  minIntervalSec = readLe16(&payload[4]);
+  maxIntervalSec = readLe16(&payload[6]);
+  return true;
+}
+
+uint8_t ZigbeeZcl::buildConfigureReportingResponsePayload(uint8_t* out,
+                                                          uint8_t outMax,
+                                                          uint8_t status,
+                                                          uint8_t direction,
+                                                          uint16_t attrId) {
+  if (status == ZCL_STATUS_SUCCESS) return 0;
+  if (!out || outMax < 4) return 0;
+  out[0] = status;
+  out[1] = direction;
+  writeLe16(&out[2], attrId);
+  return 4;
+}
+
+bool ZigbeeZcl::parseConfigureReportingStatusRecord(const uint8_t* payload,
+                                                    uint8_t payloadLen,
+                                                    uint8_t& status,
+                                                    uint8_t& direction,
+                                                    uint16_t& attrId) {
+  if (!payload || payloadLen < 4) return false;
+  status = payload[0];
+  direction = payload[1];
+  attrId = readLe16(&payload[2]);
+  return true;
+}
+
 bool ZigbeeZcl::applyOnOffCommand(uint8_t commandId, bool& on) {
   if (commandId == ZCL_ON_OFF_CMD_OFF) {
     on = false;

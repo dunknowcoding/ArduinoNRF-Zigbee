@@ -60,6 +60,7 @@ alongside the ArduinoNRF core.
    - **CC2530_ZclLink** — a two-node APS/ZCL On/Off command-frame link
    - **CC2530_OnOffCluster** — a tiny two-node On/Off cluster behavior demo
    - **CC2530_ClusterNode** — reusable Basic + On/Off cluster node demo
+   - **CC2530_ReportingNode** — Configure Reporting + Report Attributes demo
 
 > Board layout note: some nice!nano-compatible bootloaders report
 > `SoftDevice: not found` in `INFO_UF2.TXT`. For those boards, select the
@@ -132,6 +133,10 @@ how to combine those helpers into a minimal behavior loop.
 helpers. They can build ZCL responses for On/Off state changes, OnOff reads, and
 Basic cluster reads such as ManufacturerName, ModelIdentifier, and PowerSource.
 
+`ZigbeeBoolReportScheduler` adds the first small reporting helper: it stores the
+configured min/max interval for a boolean attribute, detects changes, and builds
+ZCL Report Attributes frames when a sketch should publish a report.
+
 `begin()` also resynchronizes the CC2530 firmware's framed UART parser before
 the first ping. This matters after host uploads/resets because the CC2530 may
 keep running while the nRF resets, leaving the module mid-frame.
@@ -157,6 +162,8 @@ CC2530 module:
 - `CC2530_ClusterNode` dispatches incoming ZCL frames through reusable
   `ZigbeeOnOffCluster` / `ZigbeeBasicCluster` helpers and answers Basic +
   On/Off reads.
+- `CC2530_ReportingNode` accepts Configure Reporting for OnOff.OnOff and emits
+  Report Attributes on state change / max interval.
 - Because the examples use promiscuous receive mode, unrelated 802.15.4 traffic
   on the channel can appear as noisy frames; the `hello N` payloads are the link
   confirmation.
@@ -165,11 +172,11 @@ CC2530 module:
 
 NiusZigbee currently implements a raw IEEE 802.15.4 CC2530 backend plus small
 short-address MAC, Zigbee NWK/APS data-frame, basic ZCL command-frame helpers,
-and tiny reusable Basic / OnOff behavior helpers, not a full Zigbee PRO stack.
-Missing full-stack pieces include ZDO, coordinator / router / end-device join
-flows, full ZCL cluster libraries, binding/groups, reporting configuration,
-Trust Center behavior, install codes, and Zigbee security. A future ZNP /
-Z-Stack backend can live beside the raw driver. See
+tiny reusable Basic / OnOff behavior helpers, and a boolean report scheduler,
+not a full Zigbee PRO stack. Missing full-stack pieces include ZDO, coordinator
+/ router / end-device join flows, full ZCL cluster libraries, binding/groups,
+persistent reporting tables, Trust Center behavior, install codes, and Zigbee
+security. A future ZNP / Z-Stack backend can live beside the raw driver. See
 [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules

@@ -26,6 +26,8 @@ enum ZclCommandId : uint8_t {
   ZCL_CMD_READ_ATTRIBUTES_RESPONSE = 0x01,
   ZCL_CMD_WRITE_ATTRIBUTES = 0x02,
   ZCL_CMD_WRITE_ATTRIBUTES_RESPONSE = 0x04,
+  ZCL_CMD_CONFIGURE_REPORTING = 0x06,
+  ZCL_CMD_CONFIGURE_REPORTING_RESPONSE = 0x07,
   ZCL_CMD_REPORT_ATTRIBUTES = 0x0A,
   ZCL_CMD_DEFAULT_RESPONSE = 0x0B
 };
@@ -41,7 +43,13 @@ enum ZclStatus : uint8_t {
   ZCL_STATUS_UNSUPPORTED_CLUSTER_COMMAND = 0x81,
   ZCL_STATUS_UNSUPPORTED_GENERAL_COMMAND = 0x82,
   ZCL_STATUS_INVALID_FIELD = 0x85,
-  ZCL_STATUS_UNSUPPORTED_ATTRIBUTE = 0x86
+  ZCL_STATUS_UNSUPPORTED_ATTRIBUTE = 0x86,
+  ZCL_STATUS_UNREPORTABLE_ATTRIBUTE = 0x8C
+};
+
+enum ZclReportDirection : uint8_t {
+  ZCL_REPORT_DIRECTION_REPORTED = 0x00,
+  ZCL_REPORT_DIRECTION_RECEIVED = 0x01
 };
 
 enum ZclDataType : uint8_t {
@@ -124,6 +132,34 @@ class ZigbeeZcl {
 
   static uint8_t buildReportBoolAttributePayload(uint8_t* out, uint8_t outMax,
                                                  uint16_t attrId, bool value);
+
+  static bool parseReportBoolAttributePayload(const uint8_t* payload,
+                                              uint8_t payloadLen,
+                                              uint16_t& attrId, bool& value);
+
+  static uint8_t buildConfigureReportingBoolPayload(uint8_t* out,
+                                                    uint8_t outMax,
+                                                    uint16_t attrId,
+                                                    uint16_t minIntervalSec,
+                                                    uint16_t maxIntervalSec);
+
+  static bool parseConfigureReportingBoolPayload(const uint8_t* payload,
+                                                 uint8_t payloadLen,
+                                                 uint16_t& attrId,
+                                                 uint16_t& minIntervalSec,
+                                                 uint16_t& maxIntervalSec);
+
+  static uint8_t buildConfigureReportingResponsePayload(uint8_t* out,
+                                                        uint8_t outMax,
+                                                        uint8_t status,
+                                                        uint8_t direction,
+                                                        uint16_t attrId);
+
+  static bool parseConfigureReportingStatusRecord(const uint8_t* payload,
+                                                  uint8_t payloadLen,
+                                                  uint8_t& status,
+                                                  uint8_t& direction,
+                                                  uint16_t& attrId);
 
   static bool applyOnOffCommand(uint8_t commandId, bool& on);
 

@@ -51,6 +51,7 @@ run TI Z-Stack or Zigbee PRO internally.
 - `ZigbeeZcl::applyOnOffCommand()`
 - `ZigbeeOnOffCluster`
 - `ZigbeeBasicCluster`
+- `ZigbeeBoolReportScheduler`
 - `CC2530Radio::sendApsData()`
 - `CC2530Radio::sendZclCommand()`
 - `CC2530Radio::onApsReceive()`
@@ -58,11 +59,12 @@ run TI Z-Stack or Zigbee PRO internally.
 - `examples/CC2530_ZclLink`
 - `examples/CC2530_OnOffCluster`
 - `examples/CC2530_ClusterNode`
+- `examples/CC2530_ReportingNode`
 
 This gives the library a real MAC envelope and a minimal Zigbee NWK data-frame
 layer, plus unicast APS, ZCL command-frame tooling, and tiny reusable Basic /
-OnOff behavior helpers, while preserving the existing raw send / receive /
-sniffer APIs. It is still not a full Zigbee PRO stack: there is no
-association/join, neighbor table, routing table, route discovery, ZDO, binding,
-reporting configuration, persistent attribute storage, full cluster library, or
-Zigbee security yet.
+OnOff behavior helpers with a boolean report scheduler, while preserving the
+existing raw send / receive / sniffer APIs. It is still not a full Zigbee PRO
+stack: there is no association/join, neighbor table, routing table, route
+discovery, ZDO, binding, persistent reporting table, persistent attribute
+storage, full cluster library, or Zigbee security yet.

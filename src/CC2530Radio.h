@@ -12,6 +12,7 @@
 
 #include "modules/CC2530/CC2530Radio.h"
 #include "ZigbeeClusters.h"
+#include "ZigbeeReporting.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530RxCallback;
@@ -29,5 +30,6 @@ using nzb::ZigbeeAps;
 using nzb::ZigbeeZcl;
 using nzb::ZigbeeOnOffCluster;
 using nzb::ZigbeeBasicCluster;
+using nzb::ZigbeeBoolReportScheduler;
 
 #endif  // ARDUINONRF_ZIGBEE_PUBLIC_CC2530RADIO_H
