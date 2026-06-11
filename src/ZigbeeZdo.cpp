@@ -332,4 +332,28 @@ bool ZigbeeZdo::parseMatchDescriptorResponse(
   return true;
 }
 
+uint8_t ZigbeeZdo::buildDeviceAnnounce(uint8_t* out, uint8_t outMax,
+                                       uint8_t sequence, uint16_t nwkAddress,
+                                       uint64_t ieeeAddress,
+                                       uint8_t capability) {
+  if (!out || outMax < 12) return 0;
+  out[0] = sequence;
+  writeLe16(&out[1], nwkAddress);
+  writeLe64(&out[3], ieeeAddress);
+  out[11] = capability;
+  return 12;
+}
+
+bool ZigbeeZdo::parseDeviceAnnounce(const uint8_t* payload,
+                                    uint8_t payloadLen,
+                                    ZdoDeviceAnnounce& announce) {
+  announce = ZdoDeviceAnnounce();
+  if (!payload || payloadLen < 12) return false;
+  announce.sequence = payload[0];
+  announce.nwkAddress = readLe16(&payload[1]);
+  announce.ieeeAddress = readLe64(&payload[3]);
+  announce.capability = payload[11];
+  return true;
+}
+
 }  // namespace nzb

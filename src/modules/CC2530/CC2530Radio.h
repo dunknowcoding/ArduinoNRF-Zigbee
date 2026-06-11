@@ -38,6 +38,8 @@ typedef void (*CC2530RxCallback)(const uint8_t* psdu, uint8_t len, int8_t rssi,
                                  uint8_t lqi);
 typedef void (*CC2530DataCallback)(const MacDataFrame& frame, int8_t rssi,
                                    uint8_t lqi);
+typedef void (*CC2530MacCommandCallback)(const MacCommandFrame& frame,
+                                         int8_t rssi, uint8_t lqi);
 typedef void (*CC2530NwkCallback)(const MacDataFrame& mac,
                                   const NwkDataFrame& nwk, int8_t rssi,
                                   uint8_t lqi);
@@ -125,6 +127,16 @@ class CC2530Radio {
                 const uint8_t* payload, uint8_t len,
                 bool ackRequest = false);
 
+  /** Transmit a MAC Association Request from an extended-address child. */
+  bool sendAssociationRequest(uint16_t panId, uint16_t coordShort,
+                              uint64_t srcIeee, uint8_t capability,
+                              bool ackRequest = true);
+
+  /** Transmit a MAC Association Response to an extended-address child. */
+  bool sendAssociationResponse(uint16_t panId, uint64_t dstIeee,
+                               uint16_t srcShort, uint16_t assignedShort,
+                               uint8_t status, bool ackRequest = true);
+
   /** Transmit a simple Zigbee NWK data frame inside a short-address MAC frame. */
   bool sendNwkData(uint16_t panId, uint16_t macDstShort, uint16_t macSrcShort,
                    uint16_t nwkDstShort, uint16_t nwkSrcShort,
@@ -175,6 +187,9 @@ class CC2530Radio {
   /** Register a parsed short-address data-frame callback (delivered from poll()). */
   void onDataReceive(CC2530DataCallback cb) { dataCb_ = cb; }
 
+  /** Register a parsed MAC command-frame callback (delivered from poll()). */
+  void onMacCommandReceive(CC2530MacCommandCallback cb) { macCommandCb_ = cb; }
+
   /** Register a parsed Zigbee NWK data-frame callback (delivered from poll()). */
   void onNwkReceive(CC2530NwkCallback cb) { nwkCb_ = cb; }
 
@@ -197,6 +212,7 @@ class CC2530Radio {
   HardwareSerial* serial_;
   CC2530RxCallback rxCb_;
   CC2530DataCallback dataCb_;
+  CC2530MacCommandCallback macCommandCb_;
   CC2530NwkCallback nwkCb_;
   CC2530NwkCommandCallback nwkCommandCb_;
   CC2530ApsCallback apsCb_;

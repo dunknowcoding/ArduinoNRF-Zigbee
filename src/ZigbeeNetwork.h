@@ -10,6 +10,7 @@
 
 #include <Arduino.h>
 #include "ZigbeeTables.h"
+#include "ZigbeeMac.h"
 
 namespace nzb {
 
@@ -19,6 +20,7 @@ static const uint16_t ZB_NWK_ADDR_RESERVED_MIN = 0xFFF8;
 
 struct ZigbeeNetworkInfo {
   bool joined;
+  uint8_t state;
   uint8_t deviceType;
   uint16_t panId;
   uint64_t extendedPanId;
@@ -28,6 +30,23 @@ struct ZigbeeNetworkInfo {
   uint8_t depth;
   uint8_t updateId;
   uint32_t outgoingFrameCounter;
+};
+
+enum ZigbeeNetworkState : uint8_t {
+  ZB_NWK_STATE_IDLE = 0,
+  ZB_NWK_STATE_COORDINATOR = 1,
+  ZB_NWK_STATE_JOINING = 2,
+  ZB_NWK_STATE_ROUTER = 3,
+  ZB_NWK_STATE_END_DEVICE = 4,
+  ZB_NWK_STATE_LEAVING = 5
+};
+
+struct ZigbeeAssociationDecision {
+  bool accepted;
+  uint16_t assignedAddress;
+  uint8_t status;
+  uint8_t deviceType;
+  bool rxOnWhenIdle;
 };
 
 class ZigbeePermitJoin {
@@ -81,6 +100,11 @@ class ZigbeeNetwork {
                          uint64_t extendedPanId, uint8_t channel,
                          uint16_t nwkAddress, uint16_t parentAddress,
                          uint8_t depth, uint8_t updateId = 0);
+  void beginJoining(uint8_t deviceType, uint16_t panId,
+                    uint64_t extendedPanId, uint8_t channel,
+                    uint16_t parentAddress, uint8_t updateId = 0);
+  bool completeJoin(uint16_t nwkAddress, uint16_t parentAddress,
+                    uint8_t parentDepth = 0);
   void leave();
 
   const ZigbeeNetworkInfo& info() const { return info_; }
@@ -88,6 +112,13 @@ class ZigbeeNetwork {
   bool isCoordinator() const {
     return info_.joined && info_.deviceType == ZB_DEVICE_COORDINATOR;
   }
+  bool isRouter() const {
+    return info_.joined && info_.deviceType == ZB_DEVICE_ROUTER;
+  }
+  bool isEndDevice() const {
+    return info_.joined && info_.deviceType == ZB_DEVICE_END_DEVICE;
+  }
+  bool isJoining() const { return info_.state == ZB_NWK_STATE_JOINING; }
 
   void permitJoining(uint8_t durationSeconds, uint32_t nowMs = millis()) {
     permitJoin_.open(durationSeconds, nowMs);
@@ -105,6 +136,9 @@ class ZigbeeNetwork {
   ZigbeeNeighbor* acceptChild(uint64_t ieeeAddress, uint8_t deviceType,
                               bool rxOnWhenIdle, uint8_t lqi,
                               uint32_t nowMs = millis());
+  ZigbeeAssociationDecision handleAssociationRequest(
+      uint64_t ieeeAddress, const MacAssociationRequest& request,
+      uint8_t lqi, uint32_t nowMs = millis());
   bool noteParent(uint16_t nwkAddress, uint64_t ieeeAddress,
                   uint8_t deviceType, uint8_t depth, uint8_t lqi,
                   bool permitJoining, uint32_t nowMs = millis());

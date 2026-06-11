@@ -37,8 +37,8 @@ run TI Z-Stack or Zigbee PRO internally.
      keeping CC2530 as a MAC/PHY co-processor.
    - Add neighbor/routing tables, route discovery/repair, and NWK/APS security.
    - Add local network identity, permit-join timing, short-address allocation,
-     child acceptance, and parent bookkeeping before the over-the-air join
-     command exchange.
+     child acceptance, parent bookkeeping, MAC association request/response, and
+     ZDO Device_annce.
    - Persist network state, frame counters, bindings, reporting tables, and
      attributes in nRF flash.
 
@@ -91,6 +91,13 @@ run TI Z-Stack or Zigbee PRO internally.
 - `ZigbeeNetwork`
 - `ZigbeePermitJoin`
 - `ZigbeeAddressAllocator`
+- `ZigbeeMac` Association Request/Response helpers
+- `CC2530Radio::sendAssociationRequest()`
+- `CC2530Radio::sendAssociationResponse()`
+- `CC2530Radio::onMacCommandReceive()`
+- `ZigbeeZdo::buildDeviceAnnounce()`
+- `ZigbeeZdo::parseDeviceAnnounce()`
+- `examples/CC2530_AssociationJoin`
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`
@@ -108,9 +115,10 @@ configuration API, a minimal Zigbee NWK data-frame layer, unicast APS, endpoint
 0 ZDO discovery payload tooling, NWK command-frame tooling, a static local
 Device Object descriptor store, fixed neighbor/route table storage, ZCL
 command-frame tooling, and tiny reusable Basic / OnOff behavior helpers with a
-boolean report scheduler, and local network-state/permit-join/address-allocation
-helpers, while preserving the existing raw send / receive / sniffer APIs. It is
-still not a full Zigbee PRO stack: there is no over-the-air association / join
-exchange, neighbor aging protocol, automatic route discovery, binding,
-persistent reporting table, persistent attribute storage, full cluster library,
-or Zigbee security yet.
+boolean report scheduler, local network-state/permit-join/address-allocation
+helpers, and a first over-the-air MAC association + Device_annce demo, while
+preserving the existing raw send / receive / sniffer APIs. It is still not a
+full Zigbee PRO stack: there is no beacon scan, automatic parent selection,
+production-grade rejoin, neighbor aging protocol, automatic route discovery,
+binding, persistent reporting table, persistent attribute storage, full cluster
+library, or Zigbee security yet.

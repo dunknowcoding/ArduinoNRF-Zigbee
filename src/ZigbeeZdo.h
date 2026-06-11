@@ -18,6 +18,7 @@ enum ZdoClusterId : uint16_t {
   ZDO_SIMPLE_DESC_REQ = 0x0004,
   ZDO_ACTIVE_EP_REQ = 0x0005,
   ZDO_MATCH_DESC_REQ = 0x0006,
+  ZDO_DEVICE_ANNCE = 0x0013,
 
   ZDO_NWK_ADDR_RSP = 0x8000,
   ZDO_IEEE_ADDR_RSP = 0x8001,
@@ -114,6 +115,13 @@ struct ZdoMatchDescriptorResponse {
   const uint8_t* endpoints;
 };
 
+struct ZdoDeviceAnnounce {
+  uint8_t sequence;
+  uint16_t nwkAddress;
+  uint64_t ieeeAddress;
+  uint8_t capability;
+};
+
 class ZigbeeZdo {
  public:
   static const uint8_t kEndpoint = 0;
@@ -202,6 +210,13 @@ class ZigbeeZdo {
   static bool parseMatchDescriptorResponse(const uint8_t* payload,
                                            uint8_t payloadLen,
                                            ZdoMatchDescriptorResponse& response);
+
+  static uint8_t buildDeviceAnnounce(uint8_t* out, uint8_t outMax,
+                                     uint8_t sequence, uint16_t nwkAddress,
+                                     uint64_t ieeeAddress,
+                                     uint8_t capability);
+  static bool parseDeviceAnnounce(const uint8_t* payload, uint8_t payloadLen,
+                                  ZdoDeviceAnnounce& announce);
 
  private:
   static uint16_t readLe16(const uint8_t* p) {

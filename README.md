@@ -156,8 +156,9 @@ code a no-heap storage base.
 `ZigbeeNetwork`, `ZigbeePermitJoin`, and `ZigbeeAddressAllocator` add the first
 local join-state primitives: coordinator/joined-device identity, permit-join
 timing, short-address allocation, child acceptance into the neighbor table, and
-parent bookkeeping. The actual over-the-air association command exchange is a
-later layer.
+parent bookkeeping. `CC2530_AssociationJoin` now exercises the first
+over-the-air join path: MAC Association Request/Response followed by ZDO
+Device_annce.
 
 `ZigbeeZcl` also includes small helpers for Read Attributes payloads, Default
 Response payloads, boolean/uint8 attribute records, boolean reports, and applying
@@ -212,20 +213,25 @@ CC2530 module:
 - `CC2530_ZdoDiscovery` exchanges IEEE/NWK address, Active Endpoint, Simple
   Descriptor, and Match Descriptor requests/responses between two boards under
   hardware filtering + Auto ACK + CCA TX.
+- `CC2530_AssociationJoin` runs board1 as a coordinator with permit join open,
+  accepts board2's MAC Association Request, assigns a short address, and receives
+  board2's ZDO Device_annce.
 - Promiscuous examples can still show unrelated 802.15.4 traffic on the channel;
   filtered examples program PAN/short/IEEE addresses before exchanging frames.
 
 ## Current stack boundary
 
 NiusZigbee currently implements an SDCC CC2530 MAC/PHY backend plus small
-short-address MAC, Zigbee NWK data/command and APS data-frame helpers, ZDO
-discovery payload helpers, static local Device Object descriptors, fixed
-neighbor/route tables, basic ZCL command-frame helpers, local network-state
-helpers, tiny reusable Basic / OnOff behavior helpers, and a boolean report scheduler,
-not a full Zigbee PRO stack. Missing full-stack pieces include association and
-over-the-air join state machines, actual neighbor aging/routing protocols, full
-ZCL cluster libraries, binding/groups, persistent reporting tables, Trust Center
-behavior, install codes, NWK/APS security, and Zigbee PRO route discovery/repair.
+short-address MAC, MAC association command helpers, Zigbee NWK data/command and
+APS data-frame helpers, ZDO discovery/device-announcement payload helpers,
+static local Device Object descriptors, fixed neighbor/route tables, basic ZCL
+command-frame helpers, local network-state helpers, tiny reusable Basic / OnOff
+behavior helpers, and a boolean report scheduler, not a full Zigbee PRO stack.
+Missing full-stack pieces include beacon scan, automatic parent selection,
+production-grade join/rejoin state machines, actual neighbor aging/routing
+protocols, full ZCL cluster libraries, binding/groups, persistent reporting
+tables, Trust Center behavior, install codes, NWK/APS security, and Zigbee PRO
+route discovery/repair.
 A future ZNP / Z-Stack backend can live beside the raw driver. See
 [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 

@@ -34,6 +34,56 @@ struct MacDataFrame {
   uint8_t payloadLen;
 };
 
+enum MacAddressMode : uint8_t {
+  MAC_ADDR_NONE = 0,
+  MAC_ADDR_SHORT = 2,
+  MAC_ADDR_EXTENDED = 3
+};
+
+enum MacCommandId : uint8_t {
+  MAC_CMD_ASSOCIATION_REQUEST = 0x01,
+  MAC_CMD_ASSOCIATION_RESPONSE = 0x02
+};
+
+enum MacAssociationStatus : uint8_t {
+  MAC_ASSOC_SUCCESS = 0x00,
+  MAC_ASSOC_PAN_AT_CAPACITY = 0x01,
+  MAC_ASSOC_PAN_ACCESS_DENIED = 0x02
+};
+
+struct MacCommandFrame {
+  bool valid;
+  uint8_t frameType;
+  uint8_t sequence;
+  bool ackRequest;
+  bool panIdCompression;
+  uint8_t dstAddrMode;
+  uint8_t srcAddrMode;
+  uint16_t dstPanId;
+  uint16_t dstShort;
+  uint64_t dstIeee;
+  uint16_t srcPanId;
+  uint16_t srcShort;
+  uint64_t srcIeee;
+  uint8_t commandId;
+  const uint8_t* payload;
+  uint8_t payloadLen;
+};
+
+struct MacAssociationRequest {
+  bool valid;
+  uint8_t capability;
+  bool allocateAddress;
+  bool receiverOnWhenIdle;
+  bool fullFunctionDevice;
+};
+
+struct MacAssociationResponse {
+  bool valid;
+  uint16_t shortAddress;
+  uint8_t status;
+};
+
 class ZigbeeMac {
  public:
   static const uint8_t kMaxPsdu = 125;
@@ -50,6 +100,26 @@ class ZigbeeMac {
   static bool parseShortDataFrame(const uint8_t* psdu, uint8_t len,
                                   MacDataFrame& frame);
 
+  static uint8_t buildAssociationRequest(uint8_t* out, uint8_t outMax,
+                                         uint16_t panId, uint16_t coordShort,
+                                         uint64_t srcIeee, uint8_t sequence,
+                                         uint8_t capability,
+                                         bool ackRequest = true);
+
+  static uint8_t buildAssociationResponse(uint8_t* out, uint8_t outMax,
+                                          uint16_t panId, uint64_t dstIeee,
+                                          uint16_t srcShort, uint8_t sequence,
+                                          uint16_t assignedShort,
+                                          uint8_t status,
+                                          bool ackRequest = true);
+
+  static bool parseCommandFrame(const uint8_t* psdu, uint8_t len,
+                                MacCommandFrame& frame);
+  static bool parseAssociationRequest(const MacCommandFrame& frame,
+                                      MacAssociationRequest& request);
+  static bool parseAssociationResponse(const MacCommandFrame& frame,
+                                       MacAssociationResponse& response);
+
   static bool isBroadcastShort(uint16_t shortAddress) {
     return shortAddress == kBroadcastShort;
   }
@@ -62,6 +132,8 @@ class ZigbeeMac {
     p[0] = (uint8_t)(v & 0xFF);
     p[1] = (uint8_t)(v >> 8);
   }
+  static uint64_t readLe64(const uint8_t* p);
+  static void writeLe64(uint8_t* p, uint64_t v);
 };
 
 }  // namespace nzb

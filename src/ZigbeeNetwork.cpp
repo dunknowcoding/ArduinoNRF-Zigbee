@@ -99,6 +99,7 @@ void ZigbeeNetwork::beginCoordinator(uint16_t panId, uint64_t extendedPanId,
                                      uint8_t channel, uint8_t updateId) {
   info_ = ZigbeeNetworkInfo();
   info_.joined = true;
+  info_.state = ZB_NWK_STATE_COORDINATOR;
   info_.deviceType = ZB_DEVICE_COORDINATOR;
   info_.panId = panId;
   info_.extendedPanId = extendedPanId;
@@ -117,6 +118,9 @@ void ZigbeeNetwork::beginJoinedDevice(uint8_t deviceType, uint16_t panId,
                                       uint8_t updateId) {
   info_ = ZigbeeNetworkInfo();
   info_.joined = true;
+  info_.state = (deviceType == ZB_DEVICE_ROUTER) ? ZB_NWK_STATE_ROUTER :
+                (deviceType == ZB_DEVICE_END_DEVICE) ? ZB_NWK_STATE_END_DEVICE :
+                ZB_NWK_STATE_IDLE;
   info_.deviceType = deviceType;
   info_.panId = panId;
   info_.extendedPanId = extendedPanId;
@@ -128,9 +132,41 @@ void ZigbeeNetwork::beginJoinedDevice(uint8_t deviceType, uint16_t panId,
   info_.outgoingFrameCounter = 0;
 }
 
+void ZigbeeNetwork::beginJoining(uint8_t deviceType, uint16_t panId,
+                                 uint64_t extendedPanId, uint8_t channel,
+                                 uint16_t parentAddress, uint8_t updateId) {
+  info_ = ZigbeeNetworkInfo();
+  info_.joined = false;
+  info_.state = ZB_NWK_STATE_JOINING;
+  info_.deviceType = deviceType;
+  info_.panId = panId;
+  info_.extendedPanId = extendedPanId;
+  info_.channel = channel;
+  info_.nwkAddress = ZB_NWK_ADDR_INVALID;
+  info_.parentAddress = parentAddress;
+  info_.depth = 0xFF;
+  info_.updateId = updateId;
+  info_.outgoingFrameCounter = 0;
+}
+
+bool ZigbeeNetwork::completeJoin(uint16_t nwkAddress,
+                                 uint16_t parentAddress,
+                                 uint8_t parentDepth) {
+  if (!isJoining()) return false;
+  if (!allocator_.isUsable(nwkAddress)) return false;
+  info_.joined = true;
+  info_.nwkAddress = nwkAddress;
+  info_.parentAddress = parentAddress;
+  info_.depth = (uint8_t)(parentDepth + 1);
+  info_.state = (info_.deviceType == ZB_DEVICE_ROUTER) ? ZB_NWK_STATE_ROUTER :
+                ZB_NWK_STATE_END_DEVICE;
+  return true;
+}
+
 void ZigbeeNetwork::leave() {
   info_ = ZigbeeNetworkInfo();
   info_.joined = false;
+  info_.state = ZB_NWK_STATE_IDLE;
   info_.deviceType = ZB_DEVICE_UNKNOWN;
   info_.panId = 0xFFFF;
   info_.extendedPanId = 0;
@@ -151,7 +187,7 @@ ZigbeeNeighbor* ZigbeeNetwork::acceptChild(uint64_t ieeeAddress,
                                            uint8_t deviceType,
                                            bool rxOnWhenIdle, uint8_t lqi,
                                            uint32_t nowMs) {
-  if (!neighbors_ || !isCoordinator()) return nullptr;
+  if (!neighbors_ || (!isCoordinator() && !isRouter())) return nullptr;
   if (!permitJoin_.isOpen(nowMs)) return nullptr;
   ZigbeeNeighbor* existing = neighbors_->findByIeee(ieeeAddress);
   uint16_t shortAddress = existing ? existing->nwkAddress
@@ -160,6 +196,37 @@ ZigbeeNeighbor* ZigbeeNetwork::acceptChild(uint64_t ieeeAddress,
   return neighbors_->upsert(shortAddress, ieeeAddress, deviceType, ZB_REL_CHILD,
                             (uint8_t)(info_.depth + 1), lqi, rxOnWhenIdle,
                             false, nowMs);
+}
+
+ZigbeeAssociationDecision ZigbeeNetwork::handleAssociationRequest(
+    uint64_t ieeeAddress, const MacAssociationRequest& request,
+    uint8_t lqi, uint32_t nowMs) {
+  ZigbeeAssociationDecision decision = ZigbeeAssociationDecision();
+  decision.status = MAC_ASSOC_PAN_ACCESS_DENIED;
+  decision.assignedAddress = ZB_NWK_ADDR_INVALID;
+  if (!request.valid || !request.allocateAddress) {
+    return decision;
+  }
+  if (!neighbors_ || (!isCoordinator() && !isRouter()) ||
+      !permitJoin_.isOpen(nowMs)) {
+    return decision;
+  }
+
+  uint8_t childType = request.fullFunctionDevice ? ZB_DEVICE_ROUTER :
+                      ZB_DEVICE_END_DEVICE;
+  ZigbeeNeighbor* child = acceptChild(ieeeAddress, childType,
+                                      request.receiverOnWhenIdle, lqi, nowMs);
+  if (!child) {
+    decision.status = MAC_ASSOC_PAN_AT_CAPACITY;
+    return decision;
+  }
+
+  decision.accepted = true;
+  decision.assignedAddress = child->nwkAddress;
+  decision.status = MAC_ASSOC_SUCCESS;
+  decision.deviceType = childType;
+  decision.rxOnWhenIdle = request.receiverOnWhenIdle;
+  return decision;
 }
 
 bool ZigbeeNetwork::noteParent(uint16_t nwkAddress, uint64_t ieeeAddress,
