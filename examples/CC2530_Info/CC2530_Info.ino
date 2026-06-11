@@ -20,7 +20,8 @@ CC2530Radio radio;          // talks to the module on Serial1 (D0/D1)
 
 void setup() {
   Serial.begin(115200);     // USB CDC to the PC (use usbcdc=enabled)
-  while (!Serial) {}
+  uint32_t serialWaitStart = millis();
+  while (!Serial && millis() - serialWaitStart < 3000) {}
 
   if (!radio.begin(11)) {   // 115200 UART link, 802.15.4 channel 11
     Serial.println("CC2530 not responding - check wiring and that the module");

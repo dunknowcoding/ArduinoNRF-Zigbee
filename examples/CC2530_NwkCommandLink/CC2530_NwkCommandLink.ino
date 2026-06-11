@@ -115,7 +115,8 @@ void onNwkCommand(const nzb::MacDataFrame& mac,
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {}
+  uint32_t serialWaitStart = millis();
+  while (!Serial && millis() - serialWaitStart < 3000) {}
 
   if (!radio.begin(15)) {
     Serial.println("CC2530 not found - check wiring/firmware.");
@@ -138,14 +139,14 @@ void setup() {
   printHex16(PEER_NODE);
   Serial.println(ok ? " mac=filtered" : " mac=configure FAILED");
 
-  nextAction = millis() + ((THIS_NODE == 0x0001) ? 1000 : 2500);
+  nextAction = millis() + ((THIS_NODE == 0x0001) ? 1000 : 2800);
 }
 
 void loop() {
   radio.poll();
 
   if ((int32_t)(millis() - nextAction) < 0) return;
-  nextAction += 5000;
+  nextAction += ((THIS_NODE == 0x0001) ? 5200 : 6900);
 
   uint8_t payload[16];
   uint8_t n = 0;

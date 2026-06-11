@@ -11,6 +11,10 @@ the radio features needed underneath a future Zigbee PRO stack: PAN/short/IEEE
 address registers, hardware frame filtering, Auto ACK, CCA transmit, TX retry
 count, raw TX/RX, and promiscuous sniffing.
 
+Firmware v0.3 keeps `FRMFILT0.MAX_FRAME_VERSION` at the CC2530 reset value while
+enabling frame filtering. This is required for Zigbee data frames, which use
+IEEE 802.15.4-2006 frame version 1.
+
 ## UART protocol
 
 ```

@@ -23,7 +23,7 @@
  *     0x84 RX_FRAME [rssi lqi psdu..]
  */
 #define FW_VER_HI 0
-#define FW_VER_LO 2
+#define FW_VER_LO 3
 
 /* ---- SFRs ---- */
 __sfr __at (0xF1) PERCFG;
@@ -93,6 +93,9 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 #define MAC_FLAG_AUTOACK  0x02
 #define MAC_FLAG_CCA_TX   0x04
 
+#define FRMFILT0_FRAME_FILTER       0x01
+#define FRMFILT0_MAX_FRAME_VERSION  0x0C
+
 #define FRMCTRL0_AUTOACK  0x20
 #define FRMCTRL0_AUTOCRC  0x40
 
@@ -121,7 +124,10 @@ static unsigned char urx_avail(void){ return U0CSR & 0x04; }
 static unsigned char urx(void){ while(!(U0CSR & 0x04)){} return U0DBUF; }
 
 static void apply_mac(void){
-  FRMFILT0 = (mac_flags & MAC_FLAG_FILTER) ? 0x01 : 0x00;
+  /* Keep MAX_FRAME_VERSION at 3. Writing only bit0 rejects Zigbee's
+     IEEE 802.15.4-2006 data frames (frame version 1) when filtering is on. */
+  FRMFILT0 = (unsigned char)(FRMFILT0_MAX_FRAME_VERSION |
+             ((mac_flags & MAC_FLAG_FILTER) ? FRMFILT0_FRAME_FILTER : 0x00));
   FRMCTRL0 = (unsigned char)(FRMCTRL0_AUTOCRC |
              ((mac_flags & MAC_FLAG_AUTOACK) ? FRMCTRL0_AUTOACK : 0x00));
 }

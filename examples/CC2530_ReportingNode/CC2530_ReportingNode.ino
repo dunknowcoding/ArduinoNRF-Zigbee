@@ -195,7 +195,8 @@ void onZclCommand(const nzb::MacDataFrame& mac, const nzb::NwkDataFrame& nwk,
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {}
+  uint32_t serialWaitStart = millis();
+  while (!Serial && millis() - serialWaitStart < 3000) {}
 
   if (!radio.begin(11)) {
     Serial.println("CC2530 not found - check wiring/firmware.");
@@ -211,7 +212,7 @@ void setup() {
   printHex16(PEER_NODE);
   Serial.println();
 
-  nextAction = millis() + ((THIS_NODE == 0x0001) ? 1000 : 2500);
+  nextAction = millis() + ((THIS_NODE == 0x0001) ? 1000 : 2800);
 }
 
 void loop() {
@@ -219,7 +220,7 @@ void loop() {
   sendReportIfDue();
 
   if ((int32_t)(millis() - nextAction) < 0) return;
-  nextAction += 6000;
+  nextAction += ((THIS_NODE == 0x0001) ? 6200 : 8300);
 
   uint8_t step = actionStep++ % 2;
   if (step == 0) {

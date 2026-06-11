@@ -189,7 +189,7 @@ CC2530 module:
 
 - `CC2530_FlashFirmware` detects `0xA5xx`, flashes the SDCC transceiver, and
   verifies read-back.
-- `CC2530_Info` reports firmware `v0.2` and repeated `ping -> PONG`.
+- `CC2530_Info` reports firmware `v0.3` and repeated `ping -> PONG`.
 - `CC2530_MacControl` writes PAN/short/IEEE address, enables filtering +
   Auto ACK + CCA TX with three retries, and reads the settings back.
 - `CC2530_Link` on two boards shows `TX "hello N" ok` and reciprocal
@@ -207,13 +207,13 @@ CC2530 module:
   On/Off reads.
 - `CC2530_ReportingNode` accepts Configure Reporting for OnOff.OnOff and emits
   Report Attributes on state change / max interval.
-- `CC2530_ZdoDiscovery` compiles for two nodes and board1 uploads/runs with
-  endpoint 0 discovery enabled through `ZigbeeDeviceObject`. Board2 was not
-  present as a connected USB serial device during the final pass, so two-board
-  ZDO RX/RSP validation should be rerun after reconnecting board2.
-- Because the examples use promiscuous receive mode, unrelated 802.15.4 traffic
-  on the channel can appear as noisy frames; the `hello N` payloads are the link
-  confirmation.
+- `CC2530_NwkCommandLink` exchanges Route Request/Reply and Network Status under
+  hardware filtering + Auto ACK + CCA TX.
+- `CC2530_ZdoDiscovery` exchanges IEEE/NWK address, Active Endpoint, Simple
+  Descriptor, and Match Descriptor requests/responses between two boards under
+  hardware filtering + Auto ACK + CCA TX.
+- Promiscuous examples can still show unrelated 802.15.4 traffic on the channel;
+  filtered examples program PAN/short/IEEE addresses before exchanging frames.
 
 ## Current stack boundary
 

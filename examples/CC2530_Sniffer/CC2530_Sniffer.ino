@@ -30,7 +30,8 @@ void onFrame(const uint8_t* psdu, uint8_t len, int8_t rssi, uint8_t lqi) {
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {}
+  uint32_t serialWaitStart = millis();
+  while (!Serial && millis() - serialWaitStart < 3000) {}
 
   if (!radio.begin(11)) {           // change 11 to any channel 11..26
     Serial.println("CC2530 not found - check wiring/firmware.");

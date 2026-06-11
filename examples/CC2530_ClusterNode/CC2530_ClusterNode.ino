@@ -109,7 +109,8 @@ void onZclCommand(const nzb::MacDataFrame& mac, const nzb::NwkDataFrame& nwk,
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {}
+  uint32_t serialWaitStart = millis();
+  while (!Serial && millis() - serialWaitStart < 3000) {}
 
   basic.setIdentity("NiusRobotLab", "ArduinoNRF-Zigbee", "2026-06-10");
   basic.setPowerSource(0x03);
@@ -129,14 +130,14 @@ void setup() {
   Serial.print(" state=");
   Serial.println(onOff.isOn() ? "ON" : "OFF");
 
-  nextAction = millis() + ((THIS_NODE == 0x0001) ? 1000 : 2500);
+  nextAction = millis() + ((THIS_NODE == 0x0001) ? 1000 : 2800);
 }
 
 void loop() {
   radio.poll();
 
   if ((int32_t)(millis() - nextAction) < 0) return;
-  nextAction += 5000;
+  nextAction += ((THIS_NODE == 0x0001) ? 5200 : 6900);
 
   uint8_t step = actionStep++ % 3;
   if (step == 0) {

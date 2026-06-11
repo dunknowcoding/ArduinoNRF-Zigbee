@@ -30,7 +30,8 @@ void onProgress(uint8_t percent) {
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {}
+  uint32_t serialWaitStart = millis();
+  while (!Serial && millis() - serialWaitStart < 3000) {}
 
   dbg.begin();
   dbg.enterDebug();

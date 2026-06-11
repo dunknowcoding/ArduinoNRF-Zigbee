@@ -147,7 +147,8 @@ void onZclCommand(const nzb::MacDataFrame& mac, const nzb::NwkDataFrame& nwk,
 
 void setup() {
   Serial.begin(115200);
-  while (!Serial) {}
+  uint32_t serialWaitStart = millis();
+  while (!Serial && millis() - serialWaitStart < 3000) {}
 
   if (!radio.begin(11)) {
     Serial.println("CC2530 not found - check wiring/firmware.");
@@ -164,14 +165,14 @@ void setup() {
   Serial.print(" state=");
   Serial.println(onState ? "ON" : "OFF");
 
-  nextAction = millis() + ((THIS_NODE == 0x0001) ? 1000 : 2500);
+  nextAction = millis() + ((THIS_NODE == 0x0001) ? 1000 : 2800);
 }
 
 void loop() {
   radio.poll();
 
   if ((int32_t)(millis() - nextAction) >= 0) {
-    nextAction += 4000;
+    nextAction += ((THIS_NODE == 0x0001) ? 4300 : 5900);
     if ((actionStep++ & 1) == 0) {
       bool ok = radio.sendZclCommand(
           PAN_ID, PEER_NODE, THIS_NODE, PEER_NODE, THIS_NODE, ENDPOINT,
