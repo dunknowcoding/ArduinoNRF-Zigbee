@@ -29,7 +29,8 @@ const int16_t RSSI_OFFSET = 73;
 
 CC2530Radio::CC2530Radio(HardwareSerial& serial)
     : serial_(&serial), rxCb_(nullptr), dataCb_(nullptr),
-      macCommandCb_(nullptr), beaconCb_(nullptr), nwkCb_(nullptr),
+      macCommandCb_(nullptr), beaconCb_(nullptr), security_(nullptr),
+      securityIeee_(0), securityCounter_(0), nwkCb_(nullptr),
       nwkCommandCb_(nullptr), apsCb_(nullptr), zdoCb_(nullptr), zclCb_(nullptr),
       version_(0), channel_(11),
       macSequence_(0), nwkSequence_(0), apsCounter_(0), zclSequence_(0),
@@ -86,9 +87,30 @@ void CC2530Radio::feed(uint8_t b) {
               if (dataCb_) {
                 dataCb_(frame, rssi, lqi);
               }
-              if (nwkCb_ || apsCb_ || zdoCb_ || zclCb_) {
+
+              // NWK security: verify + decrypt before any NWK parsing. A
+              // secured frame that fails the MIC or replay check is dropped
+              // for the NWK-and-above callbacks (raw callbacks already ran).
+              const uint8_t* npdu = frame.payload;
+              uint8_t npduLen = frame.payloadLen;
+              bool nwkDrop = false;
+              if (security_ && security_->hasKey() && npduLen >= 8 &&
+                  (npdu[1] & 0x02) != 0) {
+                uint8_t headerLen = nwkHeaderLength(npdu, npduLen);
+                uint8_t n = security_->openNpdu(npdu, npduLen, headerLen,
+                                                securedScratch_,
+                                                sizeof(securedScratch_));
+                if (n == 0) {
+                  nwkDrop = true;
+                } else {
+                  npdu = securedScratch_;
+                  npduLen = n;
+                }
+              }
+
+              if (!nwkDrop && (nwkCb_ || apsCb_ || zdoCb_ || zclCb_)) {
                 NwkDataFrame nwk;
-                if (ZigbeeNwk::parseDataFrame(frame.payload, frame.payloadLen, nwk)) {
+                if (ZigbeeNwk::parseDataFrame(npdu, npduLen, nwk)) {
                   if (nwkCb_) {
                     nwkCb_(frame, nwk, rssi, lqi);
                   }
@@ -113,10 +135,9 @@ void CC2530Radio::feed(uint8_t b) {
                   }
                 }
               }
-              if (nwkCommandCb_) {
+              if (!nwkDrop && nwkCommandCb_) {
                 NwkCommandFrame nwkCommand;
-                if (ZigbeeNwk::parseCommandFrame(frame.payload, frame.payloadLen,
-                                                 nwkCommand)) {
+                if (ZigbeeNwk::parseCommandFrame(npdu, npduLen, nwkCommand)) {
                   nwkCommandCb_(frame, nwkCommand, rssi, lqi);
                 }
               }
@@ -323,16 +344,43 @@ bool CC2530Radio::sendBeacon(uint16_t panId, uint16_t srcShort,
   return send(psdu, psduLen);
 }
 
+uint8_t CC2530Radio::nwkHeaderLength(const uint8_t* npdu, uint8_t len) {
+  if (!npdu || len < 8) return 8;
+  uint16_t fcf = (uint16_t)npdu[0] | ((uint16_t)npdu[1] << 8);
+  uint8_t headerLen = 8;
+  if (fcf & (1u << 8)) headerLen += 1;   // multicast control
+  if (fcf & (1u << 11)) headerLen += 8;  // destination IEEE
+  if (fcf & (1u << 12)) headerLen += 8;  // source IEEE
+  return headerLen;
+}
+
+bool CC2530Radio::applyTxSecurity(uint8_t* npdu, uint8_t& npduLen,
+                                  uint8_t scratchMax) {
+  if (!security_ || !security_->hasKey()) return true;
+  uint8_t headerLen = nwkHeaderLength(npdu, npduLen);
+  uint8_t secured[ZigbeeNwk::kMaxFrame + ZigbeeSecurity::kAuxLen +
+                  ZigbeeSecurity::kMicLen];
+  uint8_t n = security_->secureNpdu(npdu, npduLen, headerLen, securityIeee_,
+                                    ++securityCounter_, secured,
+                                    sizeof(secured));
+  if (n == 0 || n > scratchMax) return false;
+  memcpy(npdu, secured, n);
+  npduLen = n;
+  return true;
+}
+
 bool CC2530Radio::sendNwkData(uint16_t panId, uint16_t macDstShort,
                               uint16_t macSrcShort, uint16_t nwkDstShort,
                               uint16_t nwkSrcShort, const uint8_t* payload,
                               uint8_t len, uint8_t radius,
                               bool ackRequest) {
-  uint8_t npdu[ZigbeeNwk::kMaxFrame];
+  uint8_t npdu[ZigbeeNwk::kMaxFrame + ZigbeeSecurity::kAuxLen +
+               ZigbeeSecurity::kMicLen];
   uint8_t npduLen = ZigbeeNwk::buildDataFrame(
-      npdu, sizeof(npdu), nwkDstShort, nwkSrcShort, radius, nwkSequence_++,
-      payload, len);
+      npdu, ZigbeeNwk::kMaxFrame, nwkDstShort, nwkSrcShort, radius,
+      nwkSequence_++, payload, len);
   if (npduLen == 0) return false;
+  if (!applyTxSecurity(npdu, npduLen, sizeof(npdu))) return false;
   return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
 }
 
@@ -341,11 +389,13 @@ bool CC2530Radio::sendNwkCommand(uint16_t panId, uint16_t macDstShort,
                                  uint16_t nwkSrcShort, uint8_t commandId,
                                  const uint8_t* payload, uint8_t len,
                                  uint8_t radius, bool ackRequest) {
-  uint8_t npdu[ZigbeeNwk::kMaxFrame];
+  uint8_t npdu[ZigbeeNwk::kMaxFrame + ZigbeeSecurity::kAuxLen +
+               ZigbeeSecurity::kMicLen];
   uint8_t npduLen = ZigbeeNwk::buildCommandFrame(
-      npdu, sizeof(npdu), nwkDstShort, nwkSrcShort, radius, nwkSequence_++,
-      commandId, payload, len);
+      npdu, ZigbeeNwk::kMaxFrame, nwkDstShort, nwkSrcShort, radius,
+      nwkSequence_++, commandId, payload, len);
   if (npduLen == 0) return false;
+  if (!applyTxSecurity(npdu, npduLen, sizeof(npdu))) return false;
   return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
 }
 

@@ -59,6 +59,8 @@ using nzb::ZigbeeRouting;
 using nzb::ZigbeeRouteDiscoveryEntry;
 using nzb::ZigbeeRreqDecision;
 using nzb::ZigbeeRrepDecision;
+using nzb::ZigbeeSecurity;
+using nzb::ZigbeeSecurityStats;
 using nzb::ZB_ROUTE_ACTIVE;
 using nzb::ZB_ROUTE_DISCOVERY_UNDERWAY;
 using nzb::ApsDataFrame;

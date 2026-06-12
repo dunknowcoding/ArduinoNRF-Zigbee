@@ -247,6 +247,14 @@ CC2530 module:
   back to scanning (correctly skipping up to six foreign `permit=no` networks
   heard on channel 25), and when the coordinator returns it rejoins on the
   first attempt and rebuilds the route.
+- The entire flow above also runs with **NWK security enabled**: every NWK
+  frame (announce, link status, route discovery, routed data) carries the
+  Zigbee auxiliary header and is AES-CCM* ENC-MIC-32 protected, computed on
+  the nRF52840's hardware AES block. Status lines report
+  `sec[tx=18 rx=5 mic=0 rpl=0]`-style statistics. A joiner built with
+  `-DNIUS_ZIGBEE_WRONG_KEY=1` still associates at the MAC level but every
+  NWK frame it sends is MIC-rejected (`mic=` climbs, `rx=` freezes, its
+  link costs stay 0/0).
 - Promiscuous examples can still show unrelated 802.15.4 traffic on the channel;
   filtered examples program PAN/short/IEEE addresses before exchanging frames.
 

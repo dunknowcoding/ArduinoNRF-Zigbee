@@ -127,6 +127,18 @@ run TI Z-Stack or Zigbee PRO internally.
   ACTIVE routes both ends -> periodic routed ping/pong at 100% round trip;
   full self-healing loop: silenced parent aged out at 54 s -> rejoin
   attempts -> re-scan -> auto-rejoin on coordinator return -> route rebuilt)
+- `ZigbeeSecurity` (new): Zigbee NWK security level 5 (ENC-MIC-32) with
+  AES-CCM* assembled host-side on the nRF52840 hardware AES-ECB block;
+  14-byte auxiliary header with on-air level-bit zeroing/substitution,
+  source-IEEE replay table, and tx/rx/MIC/replay statistics
+- `CC2530Radio::attachSecurity()`: transparent encrypt on
+  `sendNwkData()`/`sendNwkCommand()` (and everything layered on them) and
+  verify-decrypt-reparse on receive; MIC/replay failures drop the frame for
+  NWK-and-above callbacks
+- `examples/CC2530_BeaconJoin` security phase (HW-verified: the whole
+  join/link-status/route/ping flow runs encrypted with mic=0 rpl=0;
+  a wrong-key joiner associates at MAC level but every NWK frame it sends
+  is MIC-rejected)
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`
@@ -157,10 +169,12 @@ while preserving the existing raw send / receive / sniffer APIs.
 
 ## Remaining gaps toward Zigbee PRO (priority order)
 
-1. **NWK security** - AES-CCM* frame protection. Frame counters exist in
-   `ZigbeeNetwork`; the nRF52840 has hardware AES (ECB/CCM) drivers in the
-   ArduinoNRF core that can encrypt host-side before handing PSDUs to the
-   CC2530.
+1. **Key transport** - the network key is currently pre-shared in the
+   sketch. Standard Trust Center behavior (transport the network key at
+   join time under a link key, key rotation via keySeq) is the next
+   security step. Frame-counter persistence also belongs here (today a
+   reboot restarts counters and peers compensate by resetting their replay
+   tables at join events).
 2. **Broadcast Transaction Table** - broadcast dedup/passive ack. Required
    for correct multi-hop RREQ/broadcast behavior (the current discovery
    table only dedups route requests).

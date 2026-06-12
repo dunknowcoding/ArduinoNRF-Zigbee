@@ -24,6 +24,7 @@
 #include "../../ZigbeeAps.h"
 #include "../../ZigbeeZdo.h"
 #include "../../ZigbeeZcl.h"
+#include "../../ZigbeeSecurity.h"
 
 namespace nzb {
 
@@ -139,6 +140,20 @@ class CC2530Radio {
                                uint16_t srcShort, uint16_t assignedShort,
                                uint8_t status, bool ackRequest = true);
 
+  /**
+   * Enable NWK-layer security: every NWK frame sent through
+   * sendNwkData()/sendNwkCommand() (and the APS/ZDO/ZCL helpers built on
+   * them) is AES-CCM*-protected, and received secured NWK frames are
+   * verified + decrypted before parsing. Frames that fail the MIC or replay
+   * check are dropped (counted in security.stats()).
+   * @param selfIeee our IEEE address (used in the aux header / CCM nonce).
+   */
+  void attachSecurity(ZigbeeSecurity& security, uint64_t selfIeee) {
+    security_ = &security;
+    securityIeee_ = selfIeee;
+  }
+  ZigbeeSecurity* security() { return security_; }
+
   /** Broadcast a Beacon Request MAC command (active scan probe). */
   bool sendBeaconRequest();
 
@@ -239,6 +254,16 @@ class CC2530Radio {
   uint8_t apsCounter_;
   uint8_t zclSequence_;
   uint8_t lastTxAttempts_;
+  ZigbeeSecurity* security_;
+  uint64_t securityIeee_;
+  uint32_t securityCounter_;
+  uint8_t securedScratch_[140];
+
+  /** NWK header length from the frame-control IEEE-address bits. */
+  static uint8_t nwkHeaderLength(const uint8_t* npdu, uint8_t len);
+  /** Encrypt a plain NPDU in place of the caller's buffer when security is
+      attached; returns the buffer/length to actually transmit. */
+  bool applyTxSecurity(uint8_t* npdu, uint8_t& npduLen, uint8_t scratchMax);
 
   // incoming-frame parser
   uint8_t state_, len_, idx_, fcs_;

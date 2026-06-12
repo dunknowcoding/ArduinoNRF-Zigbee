@@ -18,6 +18,14 @@
   ACTIVE routes, and a routed "route ping"/"route pong" NWK data exchange
   proves packets flow over the discovered next hops in both directions.
 
+  All NWK traffic (link status, route discovery, routed data, ZDO announce)
+  is protected with Zigbee NWK security: AES-CCM* ENC-MIC-32 under a
+  pre-shared network key, computed host-side on the nRF52840's hardware AES
+  block. Frames failing the MIC or replaying an old counter are dropped
+  (see the security stats in the status lines). MAC association itself stays
+  unsecured, as in real networks before key transport - standard Trust
+  Center key delivery is future work.
+
   Flash this sketch to two ArduinoNRF+CC2530 setups. Build one with
   NIUS_ZIGBEE_THIS_NODE=0x0001 for the coordinator and the other with
   NIUS_ZIGBEE_THIS_NODE=0x0002 for the joining device. Only the coordinator
@@ -42,6 +50,18 @@ static const bool IS_COORDINATOR = (THIS_NODE == 0x0001);
 static const uint64_t THIS_IEEE = 0x1A62195E00000000ULL | THIS_NODE;
 static const uint8_t JOINER_CAPABILITY = 0x8A;  // allocate addr, rx-on, FFD
 
+// Pre-shared Zigbee network key - make your own for anything real!
+// Build with -DNIUS_ZIGBEE_WRONG_KEY=1 to demonstrate MIC rejection.
+static const uint8_t NETWORK_KEY[16] = {
+#ifdef NIUS_ZIGBEE_WRONG_KEY
+    0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF,
+    0xDE, 0xAD, 0xBE, 0xEF, 0xDE, 0xAD, 0xBE, 0xEF,
+#else
+    0x1A, 0x62, 0x19, 0x5E, 0x4B, 0x3C, 0x2D, 0x1E,
+    0x0F, 0xA1, 0xB2, 0xC3, 0xD4, 0xE5, 0xF6, 0x07,
+#endif
+};
+
 // Channels the joiner probes, in order. Includes channels with no network so
 // the scan demonstrably skips them.
 static const uint8_t SCAN_CHANNELS[] = {11, 15, 20, 25};
@@ -57,6 +77,7 @@ ZigbeeNetwork network;
 ZigbeeRoute routeStorage[8];
 ZigbeeRouteTable routes(routeStorage, 8);
 ZigbeeRouting routing;
+ZigbeeSecurity security;
 uint8_t pendingRreqId = 0;
 uint32_t nextRoutePingAt = 0;
 uint32_t routePings = 0;
@@ -133,6 +154,11 @@ void onMacCommand(const MacCommandFrame& frame, int8_t rssi, uint8_t lqi) {
 
     ZigbeeAssociationDecision decision =
         network.handleAssociationRequest(frame.srcIeee, request, lqi & 0x7F);
+    if (decision.accepted) {
+      // A (re)joining device restarts its outgoing frame counter; drop our
+      // replay history so its secured frames are accepted again.
+      security.resetReplayTable();
+    }
     bool ok = radio.sendAssociationResponse(
         network.info().panId, frame.srcIeee, network.info().nwkAddress,
         decision.assignedAddress, decision.status, true);
@@ -163,6 +189,7 @@ void onMacCommand(const MacCommandFrame& frame, int8_t rssi, uint8_t lqi) {
         network.completeJoin(response.shortAddress, chosenParent.shortAddress,
                              chosenParent.depth)) {
       network.resetJoinAttempts();
+      security.resetReplayTable();  // fresh network state: accept counters anew
       network.noteParent(chosenParent.shortAddress, 0,
                          chosenParent.depth == 0 ? ZB_DEVICE_COORDINATOR
                                                  : ZB_DEVICE_ROUTER,
@@ -535,6 +562,8 @@ void setup() {
   radio.onNwkCommandReceive(onNwkCommand);
   radio.onNwkReceive(onNwkData);
   routing.attachRouteTable(routes);
+  security.setNetworkKey(NETWORK_KEY);
+  radio.attachSecurity(security, THIS_IEEE);
 
   if (IS_COORDINATOR) {
     network.beginCoordinator(PAN_ID, EXT_PAN_ID, COORD_CHANNEL);
@@ -565,7 +594,16 @@ void loop() {
       Serial.print("Coordinator status children=");
       Serial.print(neighbors.count());
       Serial.print(" permit=");
-      Serial.println(network.joiningSecondsRemaining());
+      Serial.print(network.joiningSecondsRemaining());
+      Serial.print(" sec[tx=");
+      Serial.print(security.stats().secured);
+      Serial.print(" rx=");
+      Serial.print(security.stats().opened);
+      Serial.print(" mic=");
+      Serial.print(security.stats().micFailures);
+      Serial.print(" rpl=");
+      Serial.print(security.stats().replays);
+      Serial.println("]");
     } else {
       Serial.print("Joiner status state=");
       Serial.print(network.info().state);
