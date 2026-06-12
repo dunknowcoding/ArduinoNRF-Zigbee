@@ -83,7 +83,8 @@ uint16_t ZigbeeAddressAllocator::allocate(const ZigbeeNeighborTable& neighbors) 
 
 ZigbeeNetwork::ZigbeeNetwork()
     : info_(), neighbors_(nullptr), permitJoin_(), allocator_(),
-      scanDeviceType_(ZB_DEVICE_UNKNOWN), joinAttempts_(0) {
+      scanDeviceType_(ZB_DEVICE_UNKNOWN), joinAttempts_(0),
+      lastLinkStatusMs_(0) {
   clearCandidates();
   leave();
 }
@@ -355,6 +356,105 @@ bool ZigbeeNetwork::beginJoiningCandidate(const ZigbeeParentCandidate& parent) {
   beginJoining(deviceType, parent.panId, parent.extendedPanId, parent.channel,
                parent.shortAddress, parent.updateId);
   return true;
+}
+
+uint8_t ZigbeeNetwork::costFromLqi(uint8_t lqi) {
+  if (lqi >= 105) return 1;
+  if (lqi >= 95) return 2;
+  if (lqi >= 85) return 3;
+  if (lqi >= 75) return 4;
+  if (lqi >= 65) return 5;
+  if (lqi >= 55) return 6;
+  return 7;
+}
+
+bool ZigbeeNetwork::linkStatusDue(uint32_t nowMs) const {
+  if (!isCoordinator() && !isRouter()) return false;
+  return (uint32_t)(nowMs - lastLinkStatusMs_) >= kLinkStatusPeriodMs;
+}
+
+void ZigbeeNetwork::markLinkStatusSent(uint32_t nowMs) {
+  lastLinkStatusMs_ = nowMs;
+}
+
+uint8_t ZigbeeNetwork::collectLinkStatusEntries(NwkLinkStatusEntry* entries,
+                                                uint8_t maxEntries) const {
+  if (!neighbors_ || !entries || maxEntries == 0) return 0;
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < neighbors_->capacity() && n < maxEntries; ++i) {
+    const ZigbeeNeighbor* neighbor = neighbors_->slot(i);
+    if (!neighbor || !neighbor->used) continue;
+    if (neighbor->deviceType != ZB_DEVICE_ROUTER &&
+        neighbor->deviceType != ZB_DEVICE_COORDINATOR) {
+      continue;
+    }
+    entries[n].address = neighbor->nwkAddress;
+    entries[n].incomingCost =
+        neighbor->incomingCost ? neighbor->incomingCost
+                               : costFromLqi(neighbor->lqi);
+    entries[n].outgoingCost = neighbor->outgoingCost;
+    ++n;
+  }
+  return n;
+}
+
+bool ZigbeeNetwork::handleLinkStatus(uint16_t senderShort,
+                                     const NwkLinkStatusCommand& command,
+                                     uint8_t lqi, uint32_t nowMs) {
+  if (!neighbors_ || !command.valid || !info_.joined) return false;
+
+  // The sender is a live router neighbor: refresh (or learn) it.
+  ZigbeeNeighbor* existing = neighbors_->findByNwk(senderShort);
+  uint8_t relationship = (senderShort == info_.parentAddress)
+                             ? ZB_REL_PARENT
+                             : ZB_REL_SIBLING;
+  uint64_t ieee = 0;
+  uint8_t depth = 0xFF;
+  if (existing) {
+    if (senderShort != info_.parentAddress) {
+      relationship = existing->relationship;
+    }
+    ieee = existing->ieeeAddress;
+    depth = existing->depth;
+  }
+  ZigbeeNeighbor* sender = neighbors_->upsert(
+      senderShort, ieee, ZB_DEVICE_ROUTER, relationship, depth, lqi, true,
+      existing ? existing->permitJoining : false, nowMs);
+  if (!sender) return false;
+
+  sender->incomingCost = costFromLqi(lqi);
+
+  // If the sender lists us, that entry's incoming cost is OUR outgoing cost.
+  for (uint8_t i = 0; i < command.entryCount; ++i) {
+    NwkLinkStatusEntry entry;
+    if (!ZigbeeNwk::getLinkStatusEntry(command, i, entry)) break;
+    if (entry.address == info_.nwkAddress) {
+      sender->outgoingCost = entry.incomingCost;
+      break;
+    }
+  }
+  return true;
+}
+
+ZigbeeNetwork::AgingResult ZigbeeNetwork::ageNeighbors(uint32_t nowMs) {
+  AgingResult result;
+  result.removed = 0;
+  result.parentLost = false;
+  if (!neighbors_ || !info_.joined) return result;
+
+  uint32_t maxAge = kLinkStatusPeriodMs * (uint32_t)kRouterAgeLimit;
+  if (nowMs < maxAge) return result;  // not enough history yet
+  uint32_t cutoff = nowMs - maxAge;
+
+  result.removed = neighbors_->removeStaleRouters(cutoff, info_.parentAddress);
+
+  if (!isCoordinator() && info_.parentAddress != ZB_NWK_ADDR_INVALID) {
+    const ZigbeeNeighbor* parent = neighbors_->findByNwk(info_.parentAddress);
+    if (parent && parent->lastSeenMs < cutoff) {
+      result.parentLost = true;
+    }
+  }
+  return result;
 }
 
 bool ZigbeeNetwork::rejoinParent() {

@@ -35,6 +35,8 @@ struct ZigbeeNeighbor {
   uint8_t relationship;
   uint8_t depth;
   uint8_t lqi;
+  uint8_t incomingCost;  ///< link cost we measure (1 best .. 7, 0 unknown)
+  uint8_t outgoingCost;  ///< cost the neighbor reports for hearing us
   bool rxOnWhenIdle;
   bool permitJoining;
   uint32_t lastSeenMs;
@@ -50,6 +52,11 @@ class ZigbeeNeighborTable {
   uint8_t capacity() const { return capacity_; }
   uint8_t count() const;
 
+  /** Raw slot access (0..capacity-1); may return unused entries. */
+  const ZigbeeNeighbor* slot(uint8_t index) const {
+    return (entries_ && index < capacity_) ? &entries_[index] : nullptr;
+  }
+
   ZigbeeNeighbor* findByNwk(uint16_t nwkAddress);
   const ZigbeeNeighbor* findByNwk(uint16_t nwkAddress) const;
   ZigbeeNeighbor* findByIeee(uint64_t ieeeAddress);
@@ -62,6 +69,13 @@ class ZigbeeNeighborTable {
                          uint32_t nowMs = millis());
   bool removeByNwk(uint16_t nwkAddress);
   uint8_t removeOlderThan(uint32_t cutoffMs);
+
+  /** Remove router/coordinator neighbors (except @p spareAddress, normally
+      the parent) whose lastSeenMs is older than @p cutoffMs. Used by the
+      Link Status aging protocol. @return number of entries removed. */
+  uint8_t removeStaleRouters(uint32_t cutoffMs,
+                             uint16_t spareAddress = 0xFFFF);
+
   const ZigbeeNeighbor* bestParentCandidate() const;
 
  private:

@@ -7,6 +7,11 @@
   stack profile, LQI, depth), MAC-associates with it, and finally broadcasts a
   ZDO Device_annce. If association keeps failing it falls back to a fresh scan.
 
+  Once joined, both routers run the Zigbee neighbor-aging protocol: every 15 s
+  they broadcast a NWK Link Status carrying their router neighbors with
+  incoming/outgoing link costs, and neighbors that miss 3 consecutive periods
+  are aged out of the table (a stale PARENT instead triggers a rejoin).
+
   Flash this sketch to two ArduinoNRF+CC2530 setups. Build one with
   NIUS_ZIGBEE_THIS_NODE=0x0001 for the coordinator and the other with
   NIUS_ZIGBEE_THIS_NODE=0x0002 for the joining device. Only the coordinator
@@ -144,6 +149,10 @@ void onMacCommand(const MacCommandFrame& frame, int8_t rssi, uint8_t lqi) {
         network.completeJoin(response.shortAddress, chosenParent.shortAddress,
                              chosenParent.depth)) {
       network.resetJoinAttempts();
+      network.noteParent(chosenParent.shortAddress, 0,
+                         chosenParent.depth == 0 ? ZB_DEVICE_COORDINATOR
+                                                 : ZB_DEVICE_ROUTER,
+                         chosenParent.depth, chosenParent.lqi, true);
       bool ok = applyAddress(chosenParent.panId, response.shortAddress);
       Serial.print("JOINED pan=0x");
       printHex16(chosenParent.panId);
@@ -235,6 +244,79 @@ void sendDeviceAnnounce() {
   Serial.println(ok ? "ZDO Device_annce sent" : "ZDO Device_annce FAILED");
 }
 
+// ------------------------------------------------- link status / aging
+
+void onNwkCommand(const MacDataFrame& mac, const NwkCommandFrame& nwk,
+                  int8_t rssi, uint8_t lqi) {
+  (void)mac;
+  (void)rssi;
+  if (nwk.commandId != NWK_CMD_LINK_STATUS) return;
+  NwkLinkStatusCommand command;
+  if (!ZigbeeNwk::parseLinkStatusPayload(nwk.payload, nwk.payloadLen,
+                                         command)) {
+    return;
+  }
+  if (network.handleLinkStatus(nwk.srcShort, command, lqi & 0x7F)) {
+    Serial.print("LINK STATUS from 0x");
+    printHex16(nwk.srcShort);
+    Serial.print(" entries=");
+    Serial.println(command.entryCount);
+  }
+}
+
+void serviceLinkStatusAndAging() {
+  if (!network.isJoined()) return;
+  if (!network.isCoordinator() && !network.isRouter()) return;
+
+  if (network.linkStatusDue()) {
+    network.markLinkStatusSent();
+    NwkLinkStatusEntry entries[ZigbeeNetwork::kMaxLinkStatusEntries];
+    uint8_t n = network.collectLinkStatusEntries(
+        entries, ZigbeeNetwork::kMaxLinkStatusEntries);
+    uint8_t payload[1 + 3 * ZigbeeNetwork::kMaxLinkStatusEntries];
+    uint8_t len = ZigbeeNwk::buildLinkStatusPayload(payload, sizeof(payload),
+                                                    entries, n);
+    if (len > 0) {
+      radio.sendNwkCommand(network.info().panId, ZigbeeMac::kBroadcastShort,
+                           network.info().nwkAddress,
+                           ZigbeeNwk::kBroadcastAllRouters,
+                           network.info().nwkAddress, NWK_CMD_LINK_STATUS,
+                           payload, len, /*radius=*/1, false);
+    }
+
+    ZigbeeNetwork::AgingResult aged = network.ageNeighbors();
+    if (aged.removed > 0) {
+      Serial.print("aged out ");
+      Serial.print(aged.removed);
+      Serial.println(" stale router neighbor(s)");
+    }
+    if (aged.parentLost) {
+      Serial.println("parent lost - rejoining");
+      if (network.rejoinParent()) {
+        announced = false;
+        nextActionAt = millis();
+      }
+    }
+
+    // neighbor table dump with link costs
+    for (uint8_t i = 0; i < neighbors.capacity(); ++i) {
+      const ZigbeeNeighbor* nb = neighbors.slot(i);
+      if (!nb || !nb->used) continue;
+      Serial.print("  nb 0x");
+      printHex16(nb->nwkAddress);
+      Serial.print(" rel=");
+      Serial.print(nb->relationship);
+      Serial.print(" in=");
+      Serial.print(nb->incomingCost);
+      Serial.print(" out=");
+      Serial.print(nb->outgoingCost);
+      Serial.print(" age=");
+      Serial.print((millis() - nb->lastSeenMs) / 1000);
+      Serial.println("s");
+    }
+  }
+}
+
 void onZdoFrame(const MacDataFrame& mac, const NwkDataFrame& nwk,
                 const ApsDataFrame& aps, int8_t rssi, uint8_t lqi) {
   (void)mac;
@@ -268,6 +350,7 @@ void setup() {
   }
 
   radio.onMacCommandReceive(onMacCommand);
+  radio.onNwkCommandReceive(onNwkCommand);
 
   if (IS_COORDINATOR) {
     network.beginCoordinator(PAN_ID, EXT_PAN_ID, COORD_CHANNEL);
@@ -289,6 +372,7 @@ void setup() {
 
 void loop() {
   radio.poll();
+  serviceLinkStatusAndAging();
 
   if ((int32_t)(millis() - nextStatus) >= 0) {
     nextStatus = millis() + 10000;

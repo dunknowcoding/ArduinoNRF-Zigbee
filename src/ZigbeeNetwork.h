@@ -162,6 +162,41 @@ class ZigbeeNetwork {
   void noteJoinAttempt() { ++joinAttempts_; }
   void resetJoinAttempts() { joinAttempts_ = 0; }
 
+  // -- Link Status + neighbor aging -----------------------------------------
+
+  static const uint32_t kLinkStatusPeriodMs = 15000;
+  static const uint8_t kRouterAgeLimit = 3;  // missed periods before aging out
+  static const uint8_t kMaxLinkStatusEntries = 16;
+
+  /** Map a CC2530 correlation LQI (0..127) onto a Zigbee link cost (1..7). */
+  static uint8_t costFromLqi(uint8_t lqi);
+
+  /** True when a router/coordinator should broadcast its next Link Status. */
+  bool linkStatusDue(uint32_t nowMs = millis()) const;
+  void markLinkStatusSent(uint32_t nowMs = millis());
+
+  /** Fill @p entries from the router/coordinator neighbors in the table.
+      @return entry count (capped at @p maxEntries). */
+  uint8_t collectLinkStatusEntries(NwkLinkStatusEntry* entries,
+                                   uint8_t maxEntries) const;
+
+  /** Apply a received Link Status: refreshes the sender as a router
+      neighbor, sets its incoming cost from @p lqi, and copies the outgoing
+      cost from the entry that names our own address (if any). */
+  bool handleLinkStatus(uint16_t senderShort,
+                        const NwkLinkStatusCommand& command, uint8_t lqi,
+                        uint32_t nowMs = millis());
+
+  struct AgingResult {
+    uint8_t removed;
+    bool parentLost;
+  };
+
+  /** Age out router neighbors not heard for kRouterAgeLimit periods. The
+      parent is never removed, but parentLost reports its staleness so the
+      caller can rejoinParent(). */
+  AgingResult ageNeighbors(uint32_t nowMs = millis());
+
   const ZigbeeNetworkInfo& info() const { return info_; }
   bool isJoined() const { return info_.joined; }
   bool isCoordinator() const {
@@ -206,6 +241,7 @@ class ZigbeeNetwork {
   ZigbeeParentCandidate candidates_[kMaxParentCandidates];
   uint8_t scanDeviceType_;
   uint8_t joinAttempts_;
+  uint32_t lastLinkStatusMs_;
 
   void clearCandidates();
   bool candidateUsableFor(const ZigbeeParentCandidate& c,

@@ -230,7 +230,15 @@ CC2530 module:
   with Beacon Requests, hears the coordinator's Zigbee beacon on channel 15
   (`pan=0x1A62 depth=0 permit=yes`), selects it as parent, associates on the
   first attempt (addr `0x0001`), and announces — while the coordinator answers
-  beacon requests under hardware filtering.
+  beacon requests under hardware filtering. The scan also met two foreign
+  production Zigbee networks on channel 25 (`permit=no`) and correctly skipped
+  them as parents.
+- After joining, both nodes broadcast NWK Link Status every 15 s: both ends
+  settle at `in=1 out=1` link costs (outgoing cost read back from the entry
+  naming our own address in the neighbor's report), and silencing one node
+  makes the other print `aged out 1 stale router neighbor(s)` after three
+  missed periods. A stale parent instead reports parent-loss and re-enters
+  joining via `rejoinParent()`.
 - Promiscuous examples can still show unrelated 802.15.4 traffic on the channel;
   filtered examples program PAN/short/IEEE addresses before exchanging frames.
 

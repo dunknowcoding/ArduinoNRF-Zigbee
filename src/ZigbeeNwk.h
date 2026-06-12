@@ -69,7 +69,8 @@ enum NwkCommandId : uint8_t {
   NWK_CMD_LEAVE = 0x04,
   NWK_CMD_ROUTE_RECORD = 0x05,
   NWK_CMD_REJOIN_REQUEST = 0x06,
-  NWK_CMD_REJOIN_RESPONSE = 0x07
+  NWK_CMD_REJOIN_RESPONSE = 0x07,
+  NWK_CMD_LINK_STATUS = 0x08
 };
 
 enum NwkNetworkStatusCode : uint8_t {
@@ -146,6 +147,21 @@ struct NwkRejoinResponseCommand {
   bool valid;
   uint16_t nwkAddress;
   uint8_t status;
+};
+
+/** One neighbor entry inside a Link Status command. */
+struct NwkLinkStatusEntry {
+  uint16_t address;
+  uint8_t incomingCost;  ///< 1 (best) .. 7 (worst), 0 = unknown
+  uint8_t outgoingCost;
+};
+
+struct NwkLinkStatusCommand {
+  bool valid;
+  bool firstFrame;
+  bool lastFrame;
+  uint8_t entryCount;
+  const uint8_t* entries;  ///< raw 3-byte records, use getLinkStatusEntry()
 };
 
 /** Zigbee NWK-layer beacon payload (the 15 bytes carried by 802.15.4
@@ -255,6 +271,17 @@ class ZigbeeNwk {
   static bool parseRejoinResponsePayload(const uint8_t* payload,
                                          uint8_t payloadLen,
                                          NwkRejoinResponseCommand& command);
+
+  static uint8_t buildLinkStatusPayload(uint8_t* out, uint8_t outMax,
+                                        const NwkLinkStatusEntry* entries,
+                                        uint8_t entryCount,
+                                        bool firstFrame = true,
+                                        bool lastFrame = true);
+  static bool parseLinkStatusPayload(const uint8_t* payload,
+                                     uint8_t payloadLen,
+                                     NwkLinkStatusCommand& command);
+  static bool getLinkStatusEntry(const NwkLinkStatusCommand& command,
+                                 uint8_t index, NwkLinkStatusEntry& entry);
 
   /** Build the 15-byte Zigbee beacon payload carried by 802.15.4 beacons. */
   static uint8_t buildBeaconPayload(uint8_t* out, uint8_t outMax,

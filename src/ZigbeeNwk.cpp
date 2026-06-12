@@ -358,6 +358,54 @@ bool ZigbeeNwk::parseRejoinResponsePayload(
   return true;
 }
 
+uint8_t ZigbeeNwk::buildLinkStatusPayload(uint8_t* out, uint8_t outMax,
+                                          const NwkLinkStatusEntry* entries,
+                                          uint8_t entryCount,
+                                          bool firstFrame, bool lastFrame) {
+  if (!out || (entryCount > 0 && !entries)) return 0;
+  if (entryCount > 31) return 0;  // 5-bit count field
+  uint8_t needed = (uint8_t)(1 + 3 * entryCount);
+  if (outMax < needed) return 0;
+
+  out[0] = (uint8_t)(entryCount & 0x1F);
+  if (firstFrame) out[0] |= 0x20;
+  if (lastFrame) out[0] |= 0x40;
+  for (uint8_t i = 0; i < entryCount; ++i) {
+    writeLe16(&out[1 + 3 * i], entries[i].address);
+    out[3 + 3 * i] = (uint8_t)((entries[i].incomingCost & 0x07) |
+                               ((entries[i].outgoingCost & 0x07) << 4));
+  }
+  return needed;
+}
+
+bool ZigbeeNwk::parseLinkStatusPayload(const uint8_t* payload,
+                                       uint8_t payloadLen,
+                                       NwkLinkStatusCommand& command) {
+  command = NwkLinkStatusCommand();
+  if (!payload || payloadLen < 1) return false;
+  uint8_t count = (uint8_t)(payload[0] & 0x1F);
+  if (payloadLen < 1 + 3 * count) return false;
+  command.valid = true;
+  command.firstFrame = (payload[0] & 0x20) != 0;
+  command.lastFrame = (payload[0] & 0x40) != 0;
+  command.entryCount = count;
+  command.entries = &payload[1];
+  return true;
+}
+
+bool ZigbeeNwk::getLinkStatusEntry(const NwkLinkStatusCommand& command,
+                                   uint8_t index, NwkLinkStatusEntry& entry) {
+  entry = NwkLinkStatusEntry();
+  if (!command.valid || index >= command.entryCount || !command.entries) {
+    return false;
+  }
+  const uint8_t* p = &command.entries[3 * index];
+  entry.address = readLe16(&p[0]);
+  entry.incomingCost = (uint8_t)(p[2] & 0x07);
+  entry.outgoingCost = (uint8_t)((p[2] >> 4) & 0x07);
+  return true;
+}
+
 uint8_t ZigbeeNwk::buildBeaconPayload(uint8_t* out, uint8_t outMax,
                                       uint64_t extendedPanId,
                                       uint8_t deviceDepth,

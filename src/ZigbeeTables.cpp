@@ -83,6 +83,7 @@ ZigbeeNeighbor* ZigbeeNeighborTable::upsert(
   if (!entry) entry = leastRecentlySeen();
   if (!entry) return nullptr;
 
+  bool fresh = !entry->used || entry->nwkAddress != nwkAddress;
   entry->used = true;
   entry->nwkAddress = nwkAddress;
   entry->ieeeAddress = ieeeAddress;
@@ -90,10 +91,33 @@ ZigbeeNeighbor* ZigbeeNeighborTable::upsert(
   entry->relationship = relationship;
   entry->depth = depth;
   entry->lqi = lqi;
+  if (fresh) {
+    entry->incomingCost = 0;
+    entry->outgoingCost = 0;
+  }
   entry->rxOnWhenIdle = rxOnWhenIdle;
   entry->permitJoining = permitJoining;
   entry->lastSeenMs = nowMs;
   return entry;
+}
+
+uint8_t ZigbeeNeighborTable::removeStaleRouters(uint32_t cutoffMs,
+                                                uint16_t spareAddress) {
+  uint8_t removed = 0;
+  if (!entries_) return 0;
+  for (uint8_t i = 0; i < capacity_; ++i) {
+    ZigbeeNeighbor& n = entries_[i];
+    if (!n.used || n.nwkAddress == spareAddress) continue;
+    if (n.deviceType != ZB_DEVICE_ROUTER &&
+        n.deviceType != ZB_DEVICE_COORDINATOR) {
+      continue;
+    }
+    if (n.lastSeenMs < cutoffMs) {
+      n = ZigbeeNeighbor();
+      ++removed;
+    }
+  }
+  return removed;
 }
 
 bool ZigbeeNeighborTable::removeByNwk(uint16_t nwkAddress) {
