@@ -15,6 +15,7 @@
 #include "ZigbeeDevice.h"
 #include "ZigbeeTables.h"
 #include "ZigbeeNetwork.h"
+#include "ZigbeeRouting.h"
 #include "ZigbeeReporting.h"
 
 using nzb::CC2530Radio;
@@ -52,6 +53,14 @@ using nzb::NwkBeaconPayload;
 using nzb::NwkLinkStatusEntry;
 using nzb::NwkLinkStatusCommand;
 using nzb::NWK_CMD_LINK_STATUS;
+using nzb::NWK_CMD_ROUTE_REQUEST;
+using nzb::NWK_CMD_ROUTE_REPLY;
+using nzb::ZigbeeRouting;
+using nzb::ZigbeeRouteDiscoveryEntry;
+using nzb::ZigbeeRreqDecision;
+using nzb::ZigbeeRrepDecision;
+using nzb::ZB_ROUTE_ACTIVE;
+using nzb::ZB_ROUTE_DISCOVERY_UNDERWAY;
 using nzb::ApsDataFrame;
 using nzb::ZdoAddressRequest;
 using nzb::ZdoAddressResponse;

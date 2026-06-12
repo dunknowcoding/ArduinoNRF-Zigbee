@@ -118,6 +118,15 @@ run TI Z-Stack or Zigbee PRO internally.
 - `examples/CC2530_BeaconJoin` link-status phase (HW-verified: bidirectional
   15 s Link Status with in/out cost 1 on both ends; a silenced neighbor is
   aged out after 3 missed periods)
+- `ZigbeeRouting` AODV-style discovery decisions: `originateDiscovery()`,
+  `handleRouteRequest()` (duplicate suppression via a discovery table,
+  reverse-route recording, reply-as-destination, rebroadcast decision),
+  `handleRouteReply()` (route installation + relay toward originator),
+  `nextHopFor()` / `routeIsActive()` / `expire()`
+- `examples/CC2530_BeaconJoin` route phase (HW-verified: RREQ -> RREP ->
+  ACTIVE routes both ends -> periodic routed ping/pong at 100% round trip;
+  full self-healing loop: silenced parent aged out at 54 s -> rejoin
+  attempts -> re-scan -> auto-rejoin on coordinator return -> route rebuilt)
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`
@@ -139,9 +148,34 @@ boolean report scheduler, local network-state/permit-join/address-allocation
 helpers, over-the-air MAC association + Device_annce, and a hardware-verified
 active scan / parent selection / join-retry flow (beacon request -> Zigbee
 beacons -> candidate table -> association, with re-scan fallback and a
-rejoin-toward-remembered-parent primitive), and the Link Status neighbor-aging
+rejoin-toward-remembered-parent primitive), the Link Status neighbor-aging
 protocol (periodic broadcast with bidirectional link costs, stale-router
-removal, parent-loss detection feeding rejoin), while preserving the existing
-raw send / receive / sniffer APIs. It is still not a full Zigbee PRO stack:
-there is no automatic route discovery, binding, persistent reporting table,
-persistent attribute storage, full cluster library, or Zigbee security yet.
+removal, parent-loss detection feeding rejoin), and AODV-style route
+discovery (RREQ/RREP with duplicate suppression and reverse routes,
+hardware-verified end to end including the parent-loss self-healing loop),
+while preserving the existing raw send / receive / sniffer APIs.
+
+## Remaining gaps toward Zigbee PRO (priority order)
+
+1. **NWK security** - AES-CCM* frame protection. Frame counters exist in
+   `ZigbeeNetwork`; the nRF52840 has hardware AES (ECB/CCM) drivers in the
+   ArduinoNRF core that can encrypt host-side before handing PSDUs to the
+   CC2530.
+2. **Broadcast Transaction Table** - broadcast dedup/passive ack. Required
+   for correct multi-hop RREQ/broadcast behavior (the current discovery
+   table only dedups route requests).
+3. **Indirect transmission / sleepy end devices** - a parent-side pending
+   queue plus MAC Data Request handling so rx-off children can poll.
+   Needs CC2530 firmware support for the pending bit in acks (or host
+   emulation with relaxed timing).
+4. **ZDO Mgmt_Lqi_rsp / Mgmt_Rtg_rsp** - expose our neighbor/route tables
+   to standard Zigbee network-mapping tools.
+5. **Persistence** - network identity, addresses, frame counters, bindings,
+   and reporting config in nRF flash (NrfNvmc) so nodes survive reboots.
+6. **Binding table + group addressing**, APS acknowledgements/retries, and
+   APS fragmentation.
+7. **PAN ID conflict resolution and network update** (updateId / channel
+   change propagation).
+8. **Multi-hop relay verification** - the intermediate-router code paths
+   (RREQ rebroadcast, RREP relay) compile and follow the spec but need a
+   third board+module to verify over the air.

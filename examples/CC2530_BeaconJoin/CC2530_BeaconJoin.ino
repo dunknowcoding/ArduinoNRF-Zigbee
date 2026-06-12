@@ -12,6 +12,12 @@
   incoming/outgoing link costs, and neighbors that miss 3 consecutive periods
   are aged out of the table (a stale PARENT instead triggers a rejoin).
 
+  The joiner then exercises AODV-style route discovery: it broadcasts a Route
+  Request for the coordinator, the coordinator answers with a unicast Route
+  Reply (recording the reverse route as the request passes), both ends install
+  ACTIVE routes, and a routed "route ping"/"route pong" NWK data exchange
+  proves packets flow over the discovered next hops in both directions.
+
   Flash this sketch to two ArduinoNRF+CC2530 setups. Build one with
   NIUS_ZIGBEE_THIS_NODE=0x0001 for the coordinator and the other with
   NIUS_ZIGBEE_THIS_NODE=0x0002 for the joining device. Only the coordinator
@@ -48,6 +54,14 @@ CC2530Radio radio;
 ZigbeeNeighbor neighborStorage[8];
 ZigbeeNeighborTable neighbors(neighborStorage, 8);
 ZigbeeNetwork network;
+ZigbeeRoute routeStorage[8];
+ZigbeeRouteTable routes(routeStorage, 8);
+ZigbeeRouting routing;
+uint8_t pendingRreqId = 0;
+uint32_t nextRoutePingAt = 0;
+uint32_t routePings = 0;
+uint32_t routePongs = 0;
+uint32_t nextDiscoveryAt = 0;
 
 ZigbeeParentCandidate chosenParent;
 uint8_t scanChannel = 0;       // channel currently being probed
@@ -248,19 +262,187 @@ void sendDeviceAnnounce() {
 
 void onNwkCommand(const MacDataFrame& mac, const NwkCommandFrame& nwk,
                   int8_t rssi, uint8_t lqi) {
-  (void)mac;
   (void)rssi;
-  if (nwk.commandId != NWK_CMD_LINK_STATUS) return;
-  NwkLinkStatusCommand command;
-  if (!ZigbeeNwk::parseLinkStatusPayload(nwk.payload, nwk.payloadLen,
-                                         command)) {
+  uint8_t linkCost = ZigbeeNetwork::costFromLqi(lqi & 0x7F);
+
+  if (nwk.commandId == NWK_CMD_LINK_STATUS) {
+    NwkLinkStatusCommand command;
+    if (!ZigbeeNwk::parseLinkStatusPayload(nwk.payload, nwk.payloadLen,
+                                           command)) {
+      return;
+    }
+    if (network.handleLinkStatus(nwk.srcShort, command, lqi & 0x7F)) {
+      Serial.print("LINK STATUS from 0x");
+      printHex16(nwk.srcShort);
+      Serial.print(" entries=");
+      Serial.println(command.entryCount);
+    }
     return;
   }
-  if (network.handleLinkStatus(nwk.srcShort, command, lqi & 0x7F)) {
-    Serial.print("LINK STATUS from 0x");
+
+  if (nwk.commandId == NWK_CMD_ROUTE_REQUEST && network.isJoined()) {
+    NwkRouteRequestCommand rreq;
+    if (!ZigbeeNwk::parseRouteRequestPayload(nwk.payload, nwk.payloadLen,
+                                             rreq)) {
+      return;
+    }
+    ZigbeeRreqDecision d = routing.handleRouteRequest(
+        network.info().nwkAddress, network.isCoordinator() || network.isRouter(),
+        mac.srcShort, nwk.srcShort, rreq, linkCost);
+    if (d.duplicate) return;
+
+    Serial.print("RREQ id=");
+    Serial.print(rreq.routeRequestId);
+    Serial.print(" for 0x");
+    printHex16(rreq.destination);
+    Serial.print(" from 0x");
     printHex16(nwk.srcShort);
-    Serial.print(" entries=");
-    Serial.println(command.entryCount);
+    Serial.print(" via 0x");
+    printHex16(mac.srcShort);
+
+    if (d.replyAsDestination) {
+      uint8_t payload[16];
+      uint8_t n = ZigbeeNwk::buildRouteReplyPayload(
+          payload, sizeof(payload), rreq.routeRequestId, nwk.srcShort,
+          network.info().nwkAddress, d.pathCost);
+      bool ok = n > 0 && radio.sendNwkCommand(
+          network.info().panId, d.replyTo, network.info().nwkAddress,
+          nwk.srcShort, network.info().nwkAddress, NWK_CMD_ROUTE_REPLY,
+          payload, n, ZigbeeNwk::kDefaultRadius, true);
+      Serial.println(ok ? " -> RREP sent" : " -> RREP FAILED");
+    } else if (d.rebroadcast) {
+      uint8_t payload[16];
+      uint8_t n = ZigbeeNwk::buildRouteRequestPayload(
+          payload, sizeof(payload), rreq.routeRequestId, rreq.destination,
+          d.pathCost, rreq.manyToOne,
+          rreq.destinationIeeePresent ? &rreq.destinationIeee : nullptr,
+          rreq.multicast);
+      if (n > 0) {
+        radio.sendNwkCommand(network.info().panId, ZigbeeMac::kBroadcastShort,
+                             network.info().nwkAddress,
+                             ZigbeeNwk::kBroadcastAllRouters, nwk.srcShort,
+                             NWK_CMD_ROUTE_REQUEST, payload, n,
+                             nwk.radius > 1 ? nwk.radius - 1 : 1, false);
+      }
+      Serial.println(" -> rebroadcast");
+    } else {
+      Serial.println(" (recorded)");
+    }
+    return;
+  }
+
+  if (nwk.commandId == NWK_CMD_ROUTE_REPLY && network.isJoined()) {
+    NwkRouteReplyCommand rrep;
+    if (!ZigbeeNwk::parseRouteReplyPayload(nwk.payload, nwk.payloadLen,
+                                           rrep)) {
+      return;
+    }
+    ZigbeeRrepDecision d = routing.handleRouteReply(
+        network.info().nwkAddress, mac.srcShort, rrep, linkCost);
+    if (d.routeInstalled) {
+      Serial.print("RREP id=");
+      Serial.print(rrep.routeRequestId);
+      Serial.print(": route to 0x");
+      printHex16(rrep.responder);
+      Serial.print(" via 0x");
+      printHex16(mac.srcShort);
+      Serial.println(" ACTIVE");
+    } else if (d.forward) {
+      uint8_t payload[16];
+      uint8_t n = ZigbeeNwk::buildRouteReplyPayload(
+          payload, sizeof(payload), rrep.routeRequestId, rrep.originator,
+          rrep.responder, d.pathCost);
+      if (n > 0) {
+        radio.sendNwkCommand(network.info().panId, d.forwardTo,
+                             network.info().nwkAddress, rrep.originator,
+                             nwk.srcShort, NWK_CMD_ROUTE_REPLY, payload, n,
+                             ZigbeeNwk::kDefaultRadius, true);
+      }
+      Serial.println("RREP forwarded");
+    }
+    return;
+  }
+}
+
+// ------------------------------------------------- routed data ping/pong
+
+void onNwkData(const MacDataFrame& mac, const NwkDataFrame& nwk, int8_t rssi,
+               uint8_t lqi) {
+  (void)mac;
+  (void)rssi;
+  (void)lqi;
+  if (!network.isJoined() || nwk.dstShort != network.info().nwkAddress) return;
+
+  if (nwk.payloadLen == 10 && memcmp(nwk.payload, "route ping", 10) == 0) {
+    Serial.print("ROUTED ping from 0x");
+    printHex16(nwk.srcShort);
+    uint16_t nextHop = routing.nextHopFor(nwk.srcShort);
+    if (nextHop == ZigbeeRouting::kNoNextHop) nextHop = nwk.srcShort;
+    bool ok = radio.sendNwkData(network.info().panId, nextHop,
+                                network.info().nwkAddress, nwk.srcShort,
+                                network.info().nwkAddress,
+                                (const uint8_t*)"route pong", 10,
+                                ZigbeeNwk::kDefaultRadius, true);
+    Serial.println(ok ? " -> pong via route" : " -> pong FAILED");
+    return;
+  }
+
+  if (nwk.payloadLen == 10 && memcmp(nwk.payload, "route pong", 10) == 0) {
+    ++routePongs;
+    Serial.print("ROUTED pong from 0x");
+    printHex16(nwk.srcShort);
+    Serial.print(" - round trip ");
+    Serial.print(routePongs);
+    Serial.print("/");
+    Serial.println(routePings);
+  }
+}
+
+void serviceRouteDiscovery() {
+  if (IS_COORDINATOR || !network.isJoined()) return;
+
+  routing.expire();
+
+  uint16_t target = ZB_NWK_ADDR_COORDINATOR;
+  if (!routing.routeIsActive(target)) {
+    if ((int32_t)(millis() - nextDiscoveryAt) >= 0) {
+      nextDiscoveryAt = millis() + 8000;
+      pendingRreqId = routing.originateDiscovery(target);
+      uint8_t payload[16];
+      uint8_t n = ZigbeeNwk::buildRouteRequestPayload(payload, sizeof(payload),
+                                                      pendingRreqId, target);
+      bool ok = n > 0 && radio.sendNwkCommand(
+          network.info().panId, ZigbeeMac::kBroadcastShort,
+          network.info().nwkAddress, ZigbeeNwk::kBroadcastAllRouters,
+          network.info().nwkAddress, NWK_CMD_ROUTE_REQUEST, payload, n,
+          ZigbeeNwk::kDefaultRadius, false);
+      Serial.print("RREQ id=");
+      Serial.print(pendingRreqId);
+      Serial.print(" for 0x");
+      printHex16(target);
+      Serial.println(ok ? " broadcast" : " FAILED");
+    }
+    return;
+  }
+
+  // Route is ACTIVE: ping over it every 10 s (occasional MAC-level
+  // collisions self-heal on the next round).
+  if ((int32_t)(millis() - nextRoutePingAt) >= 0) {
+    nextRoutePingAt = millis() + 10000;
+    ++routePings;
+    uint16_t nextHop = routing.nextHopFor(target);
+    bool ok = radio.sendNwkData(network.info().panId, nextHop,
+                                network.info().nwkAddress, target,
+                                network.info().nwkAddress,
+                                (const uint8_t*)"route ping", 10,
+                                ZigbeeNwk::kDefaultRadius, true);
+    Serial.print("route ping ");
+    Serial.print(routePings);
+    Serial.print(" -> 0x");
+    printHex16(target);
+    Serial.print(" via 0x");
+    printHex16(nextHop);
+    Serial.println(ok ? "" : " (tx FAILED)");
   }
 }
 
@@ -351,6 +533,8 @@ void setup() {
 
   radio.onMacCommandReceive(onMacCommand);
   radio.onNwkCommandReceive(onNwkCommand);
+  radio.onNwkReceive(onNwkData);
+  routing.attachRouteTable(routes);
 
   if (IS_COORDINATOR) {
     network.beginCoordinator(PAN_ID, EXT_PAN_ID, COORD_CHANNEL);
@@ -373,6 +557,7 @@ void setup() {
 void loop() {
   radio.poll();
   serviceLinkStatusAndAging();
+  serviceRouteDiscovery();
 
   if ((int32_t)(millis() - nextStatus) >= 0) {
     nextStatus = millis() + 10000;

@@ -239,6 +239,14 @@ CC2530 module:
   makes the other print `aged out 1 stale router neighbor(s)` after three
   missed periods. A stale parent instead reports parent-loss and re-enters
   joining via `rejoinParent()`.
+- The joiner then discovers a route to the coordinator (Route Request
+  broadcast -> unicast Route Reply, reverse route recorded on the way) and
+  pings over it every 10 s: routed `route ping`/`route pong` round trips run
+  at 100%. The full self-healing loop is verified: silencing the coordinator
+  ages the parent out at 54 s, the joiner's rejoin attempts fail, it falls
+  back to scanning (correctly skipping up to six foreign `permit=no` networks
+  heard on channel 25), and when the coordinator returns it rejoins on the
+  first attempt and rebuilds the route.
 - Promiscuous examples can still show unrelated 802.15.4 traffic on the channel;
   filtered examples program PAN/short/IEEE addresses before exchanging frames.
 
