@@ -160,6 +160,16 @@ parent bookkeeping. `CC2530_AssociationJoin` now exercises the first
 over-the-air join path: MAC Association Request/Response followed by ZDO
 Device_annce.
 
+On top of that, `ZigbeeNetwork` now runs a real **active scan**: the joiner
+broadcasts Beacon Requests across a channel list, coordinators/routers answer
+with 802.15.4 beacons carrying the 15-byte Zigbee beacon payload
+(`ZigbeeNwk::buildBeaconPayload`), received beacons land in a fixed candidate
+table (`noteBeacon`), and `selectParent()` picks the best joinable parent by
+permit-join, capacity, stack profile, LQI, and depth. `CC2530_BeaconJoin`
+demonstrates the full flow — the joiner needs **no preconfigured PAN, channel,
+or coordinator address** — with association retry, re-scan fallback, and a
+`rejoinParent()` primitive for later parent-loss recovery.
+
 `ZigbeeZcl` also includes small helpers for Read Attributes payloads, Default
 Response payloads, boolean/uint8 attribute records, boolean reports, and applying
 On/Off cluster commands to a local state variable. `CC2530_OnOffCluster` shows
@@ -216,6 +226,11 @@ CC2530 module:
 - `CC2530_AssociationJoin` runs board1 as a coordinator with permit join open,
   accepts board2's MAC Association Request, assigns a short address, and receives
   board2's ZDO Device_annce.
+- `CC2530_BeaconJoin` runs a parameterless joiner that scans channels 11/15/20/25
+  with Beacon Requests, hears the coordinator's Zigbee beacon on channel 15
+  (`pan=0x1A62 depth=0 permit=yes`), selects it as parent, associates on the
+  first attempt (addr `0x0001`), and announces — while the coordinator answers
+  beacon requests under hardware filtering.
 - Promiscuous examples can still show unrelated 802.15.4 traffic on the channel;
   filtered examples program PAN/short/IEEE addresses before exchanging frames.
 

@@ -211,6 +211,116 @@ bool ZigbeeMac::parseCommandFrame(const uint8_t* psdu, uint8_t len,
   return true;
 }
 
+uint8_t ZigbeeMac::buildBeaconRequest(uint8_t* out, uint8_t outMax,
+                                      uint8_t sequence) {
+  if (!out || outMax < 8) return 0;
+
+  // Broadcast MAC command with no source: FCF(2), seq(1), dst PAN(2),
+  // dst short(2), command id(1). Never ack-requested (broadcast).
+  uint16_t fcf = 0;
+  fcf |= MAC_FRAME_COMMAND;
+  fcf |= (uint16_t)MAC_ADDR_SHORT << 10;
+  // frame version 2003 (0): scan probes must reach every conformant MAC.
+  fcf |= (uint16_t)MAC_ADDR_NONE << 14;
+
+  writeLe16(&out[0], fcf);
+  out[2] = sequence;
+  writeLe16(&out[3], kBroadcastPan);
+  writeLe16(&out[5], kBroadcastShort);
+  out[7] = MAC_CMD_BEACON_REQUEST;
+  return 8;
+}
+
+uint8_t ZigbeeMac::buildBeacon(uint8_t* out, uint8_t outMax, uint16_t srcPanId,
+                               uint16_t srcShort, uint8_t sequence,
+                               bool panCoordinator, bool associationPermit,
+                               const uint8_t* payload, uint8_t payloadLen) {
+  if (!out) return 0;
+
+  // Beaconless-PAN beacon: FCF(2), seq(1), src PAN(2), src short(2),
+  // superframe spec(2), GTS(1, none), pending addresses(1, none), payload.
+  const uint8_t headerLen = 11;
+  if (payloadLen > kMaxPsdu - headerLen) return 0;
+  if (outMax < headerLen + payloadLen) return 0;
+  if (payloadLen > 0 && !payload) return 0;
+
+  uint16_t fcf = 0;
+  fcf |= MAC_FRAME_BEACON;
+  // no destination, source PAN + short address, frame version 2003.
+  fcf |= (uint16_t)MAC_ADDR_SHORT << 14;
+
+  // Superframe spec for a beaconless PAN: beacon order 15, superframe
+  // order 15, final CAP slot 15, battery extension 0.
+  uint16_t superframe = 0x0FFF;
+  if (panCoordinator) superframe |= 1u << 14;
+  if (associationPermit) superframe |= 1u << 15;
+
+  writeLe16(&out[0], fcf);
+  out[2] = sequence;
+  writeLe16(&out[3], srcPanId);
+  writeLe16(&out[5], srcShort);
+  writeLe16(&out[7], superframe);
+  out[9] = 0;   // GTS spec: no GTS
+  out[10] = 0;  // pending address spec: none
+  for (uint8_t i = 0; i < payloadLen; ++i) {
+    out[headerLen + i] = payload[i];
+  }
+  return (uint8_t)(headerLen + payloadLen);
+}
+
+bool ZigbeeMac::parseBeacon(const uint8_t* psdu, uint8_t len,
+                            MacBeaconFrame& frame) {
+  frame = MacBeaconFrame();
+  frame.payload = nullptr;
+
+  if (!psdu || len < 11) return false;
+
+  uint16_t fcf = readLe16(&psdu[0]);
+  uint8_t frameType = (uint8_t)(fcf & 0x7);
+  uint8_t dstMode = (uint8_t)((fcf >> 10) & 0x3);
+  uint8_t srcMode = (uint8_t)((fcf >> 14) & 0x3);
+
+  if (frameType != MAC_FRAME_BEACON || dstMode != MAC_ADDR_NONE ||
+      srcMode != MAC_ADDR_SHORT) {
+    return false;
+  }
+
+  uint8_t offset = 2;
+  frame.sequence = psdu[offset++];
+  frame.srcPanId = readLe16(&psdu[offset]);
+  offset += 2;
+  frame.srcShort = readLe16(&psdu[offset]);
+  offset += 2;
+
+  uint16_t superframe = readLe16(&psdu[offset]);
+  offset += 2;
+  frame.panCoordinator = (superframe & (1u << 14)) != 0;
+  frame.associationPermit = (superframe & (1u << 15)) != 0;
+
+  // GTS spec: low 3 bits = descriptor count, each descriptor is 3 bytes
+  // (plus the 1-byte direction mask when count > 0).
+  uint8_t gtsCount = (uint8_t)(psdu[offset] & 0x07);
+  offset += 1;
+  if (gtsCount > 0) {
+    uint8_t gtsBytes = (uint8_t)(1 + 3 * gtsCount);
+    if (len < offset + gtsBytes) return false;
+    offset += gtsBytes;
+  }
+
+  // Pending address spec: 3 bits short count, 3 bits extended count.
+  if (len < offset + 1) return false;
+  uint8_t pending = psdu[offset++];
+  uint8_t pendingBytes =
+      (uint8_t)(2 * (pending & 0x07) + 8 * ((pending >> 4) & 0x07));
+  if (len < offset + pendingBytes) return false;
+  offset += pendingBytes;
+
+  frame.valid = true;
+  frame.payload = &psdu[offset];
+  frame.payloadLen = (uint8_t)(len - offset);
+  return true;
+}
+
 bool ZigbeeMac::parseAssociationRequest(
     const MacCommandFrame& frame, MacAssociationRequest& request) {
   request = MacAssociationRequest();

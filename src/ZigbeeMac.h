@@ -42,7 +42,8 @@ enum MacAddressMode : uint8_t {
 
 enum MacCommandId : uint8_t {
   MAC_CMD_ASSOCIATION_REQUEST = 0x01,
-  MAC_CMD_ASSOCIATION_RESPONSE = 0x02
+  MAC_CMD_ASSOCIATION_RESPONSE = 0x02,
+  MAC_CMD_BEACON_REQUEST = 0x07
 };
 
 enum MacAssociationStatus : uint8_t {
@@ -84,6 +85,19 @@ struct MacAssociationResponse {
   uint8_t status;
 };
 
+/** Parsed IEEE 802.15.4 beacon frame (beacon-enabled fields are not used by
+    Zigbee, so only the beaconless-PAN subset is exposed). */
+struct MacBeaconFrame {
+  bool valid;
+  uint8_t sequence;
+  uint16_t srcPanId;
+  uint16_t srcShort;
+  bool panCoordinator;
+  bool associationPermit;
+  const uint8_t* payload;  ///< beacon payload (Zigbee NWK layer payload)
+  uint8_t payloadLen;
+};
+
 class ZigbeeMac {
  public:
   static const uint8_t kMaxPsdu = 125;
@@ -119,6 +133,20 @@ class ZigbeeMac {
                                       MacAssociationRequest& request);
   static bool parseAssociationResponse(const MacCommandFrame& frame,
                                        MacAssociationResponse& response);
+
+  /** Build a broadcast Beacon Request MAC command (active scan probe). */
+  static uint8_t buildBeaconRequest(uint8_t* out, uint8_t outMax,
+                                    uint8_t sequence);
+
+  /** Build a beaconless-PAN 802.15.4 beacon frame carrying @p payload. */
+  static uint8_t buildBeacon(uint8_t* out, uint8_t outMax, uint16_t srcPanId,
+                             uint16_t srcShort, uint8_t sequence,
+                             bool panCoordinator, bool associationPermit,
+                             const uint8_t* payload, uint8_t payloadLen);
+
+  /** Parse a received beacon frame (PSDU without FCS). */
+  static bool parseBeacon(const uint8_t* psdu, uint8_t len,
+                          MacBeaconFrame& frame);
 
   static bool isBroadcastShort(uint16_t shortAddress) {
     return shortAddress == kBroadcastShort;

@@ -148,6 +148,21 @@ struct NwkRejoinResponseCommand {
   uint8_t status;
 };
 
+/** Zigbee NWK-layer beacon payload (the 15 bytes carried by 802.15.4
+    beacons on a Zigbee PRO network). */
+struct NwkBeaconPayload {
+  bool valid;
+  uint8_t protocolId;       ///< 0x00 = Zigbee
+  uint8_t stackProfile;     ///< 0x02 = Zigbee PRO
+  uint8_t protocolVersion;  ///< 0x02
+  bool routerCapacity;      ///< parent can accept router children
+  uint8_t deviceDepth;      ///< sender's tree depth (0 = coordinator)
+  bool endDeviceCapacity;   ///< parent can accept end-device children
+  uint64_t extendedPanId;
+  uint32_t txOffset;        ///< 0xFFFFFF on beaconless PANs
+  uint8_t updateId;         ///< nwkUpdateId
+};
+
 class ZigbeeNwk {
  public:
   static const uint8_t kProtocolVersion = 2;
@@ -157,6 +172,10 @@ class ZigbeeNwk {
   static const uint8_t kDefaultRadius = 30;
   static const uint16_t kBroadcastRxOnWhenIdle = 0xFFFD;
   static const uint16_t kBroadcastAllRouters = 0xFFFC;
+  static const uint8_t kBeaconPayloadLen = 15;
+  static const uint8_t kProtocolIdZigbee = 0x00;
+  static const uint8_t kStackProfilePro = 0x02;
+  static const uint32_t kBeaconlessTxOffset = 0xFFFFFFUL;
 
   static uint8_t buildDataFrame(uint8_t* out, uint8_t outMax,
                                 uint16_t dstShort, uint16_t srcShort,
@@ -236,6 +255,17 @@ class ZigbeeNwk {
   static bool parseRejoinResponsePayload(const uint8_t* payload,
                                          uint8_t payloadLen,
                                          NwkRejoinResponseCommand& command);
+
+  /** Build the 15-byte Zigbee beacon payload carried by 802.15.4 beacons. */
+  static uint8_t buildBeaconPayload(uint8_t* out, uint8_t outMax,
+                                    uint64_t extendedPanId,
+                                    uint8_t deviceDepth,
+                                    bool routerCapacity,
+                                    bool endDeviceCapacity,
+                                    uint8_t updateId,
+                                    uint8_t stackProfile = kStackProfilePro);
+  static bool parseBeaconPayload(const uint8_t* payload, uint8_t payloadLen,
+                                 NwkBeaconPayload& beacon);
 
  private:
   static uint16_t readLe16(const uint8_t* p) {

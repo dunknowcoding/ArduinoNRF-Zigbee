@@ -358,4 +358,47 @@ bool ZigbeeNwk::parseRejoinResponsePayload(
   return true;
 }
 
+uint8_t ZigbeeNwk::buildBeaconPayload(uint8_t* out, uint8_t outMax,
+                                      uint64_t extendedPanId,
+                                      uint8_t deviceDepth,
+                                      bool routerCapacity,
+                                      bool endDeviceCapacity,
+                                      uint8_t updateId,
+                                      uint8_t stackProfile) {
+  if (!out || outMax < kBeaconPayloadLen) return 0;
+
+  out[0] = kProtocolIdZigbee;
+  out[1] = (uint8_t)((stackProfile & 0x0F) |
+                     ((kProtocolVersion & 0x0F) << 4));
+  out[2] = (uint8_t)(((routerCapacity ? 1 : 0) << 2) |
+                     ((deviceDepth & 0x0F) << 3) |
+                     ((endDeviceCapacity ? 1 : 0) << 7));
+  writeLe64(&out[3], extendedPanId);
+  out[11] = (uint8_t)(kBeaconlessTxOffset & 0xFF);
+  out[12] = (uint8_t)((kBeaconlessTxOffset >> 8) & 0xFF);
+  out[13] = (uint8_t)((kBeaconlessTxOffset >> 16) & 0xFF);
+  out[14] = updateId;
+  return kBeaconPayloadLen;
+}
+
+bool ZigbeeNwk::parseBeaconPayload(const uint8_t* payload, uint8_t payloadLen,
+                                   NwkBeaconPayload& beacon) {
+  beacon = NwkBeaconPayload();
+  if (!payload || payloadLen < kBeaconPayloadLen) return false;
+  if (payload[0] != kProtocolIdZigbee) return false;
+
+  beacon.valid = true;
+  beacon.protocolId = payload[0];
+  beacon.stackProfile = (uint8_t)(payload[1] & 0x0F);
+  beacon.protocolVersion = (uint8_t)((payload[1] >> 4) & 0x0F);
+  beacon.routerCapacity = (payload[2] & (1u << 2)) != 0;
+  beacon.deviceDepth = (uint8_t)((payload[2] >> 3) & 0x0F);
+  beacon.endDeviceCapacity = (payload[2] & (1u << 7)) != 0;
+  beacon.extendedPanId = readLe64(&payload[3]);
+  beacon.txOffset = (uint32_t)payload[11] | ((uint32_t)payload[12] << 8) |
+                    ((uint32_t)payload[13] << 16);
+  beacon.updateId = payload[14];
+  return true;
+}
+
 }  // namespace nzb

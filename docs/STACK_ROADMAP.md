@@ -98,6 +98,15 @@ run TI Z-Stack or Zigbee PRO internally.
 - `ZigbeeZdo::buildDeviceAnnounce()`
 - `ZigbeeZdo::parseDeviceAnnounce()`
 - `examples/CC2530_AssociationJoin`
+- `ZigbeeMac::buildBeaconRequest()` / `buildBeacon()` / `parseBeacon()`
+- `ZigbeeNwk::buildBeaconPayload()` / `parseBeaconPayload()`
+- `CC2530Radio::sendBeaconRequest()` / `sendBeacon()` / `onBeaconReceive()`
+- `ZigbeeNetwork` active scan: `beginScan()` / `noteBeacon()` /
+  `selectParent()` / `beginJoiningCandidate()` / `rejoinParent()` and
+  join-attempt bookkeeping
+- `examples/CC2530_BeaconJoin` (HW-verified: parameterless joiner scans
+  4 channels, finds the coordinator's beacon, picks it as parent,
+  associates on the first attempt, and announces)
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`
@@ -116,9 +125,11 @@ configuration API, a minimal Zigbee NWK data-frame layer, unicast APS, endpoint
 Device Object descriptor store, fixed neighbor/route table storage, ZCL
 command-frame tooling, and tiny reusable Basic / OnOff behavior helpers with a
 boolean report scheduler, local network-state/permit-join/address-allocation
-helpers, and a first over-the-air MAC association + Device_annce demo, while
-preserving the existing raw send / receive / sniffer APIs. It is still not a
-full Zigbee PRO stack: there is no beacon scan, automatic parent selection,
-production-grade rejoin, neighbor aging protocol, automatic route discovery,
-binding, persistent reporting table, persistent attribute storage, full cluster
-library, or Zigbee security yet.
+helpers, over-the-air MAC association + Device_annce, and a hardware-verified
+active scan / parent selection / join-retry flow (beacon request -> Zigbee
+beacons -> candidate table -> association, with re-scan fallback and a
+rejoin-toward-remembered-parent primitive), while preserving the existing raw
+send / receive / sniffer APIs. It is still not a full Zigbee PRO stack: there
+is no neighbor aging protocol, automatic route discovery, binding, persistent
+reporting table, persistent attribute storage, full cluster library, or Zigbee
+security yet.

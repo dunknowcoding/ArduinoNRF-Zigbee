@@ -29,7 +29,7 @@ const int16_t RSSI_OFFSET = 73;
 
 CC2530Radio::CC2530Radio(HardwareSerial& serial)
     : serial_(&serial), rxCb_(nullptr), dataCb_(nullptr),
-      macCommandCb_(nullptr), nwkCb_(nullptr),
+      macCommandCb_(nullptr), beaconCb_(nullptr), nwkCb_(nullptr),
       nwkCommandCb_(nullptr), apsCb_(nullptr), zdoCb_(nullptr), zclCb_(nullptr),
       version_(0), channel_(11),
       macSequence_(0), nwkSequence_(0), apsCounter_(0), zclSequence_(0),
@@ -79,8 +79,8 @@ void CC2530Radio::feed(uint8_t b) {
           if (rxCb_) {
             rxCb_(psdu, psduLen, rssi, lqi);
           }
-          if (dataCb_ || macCommandCb_ || nwkCb_ || nwkCommandCb_ ||
-              apsCb_ || zdoCb_ || zclCb_) {
+          if (dataCb_ || macCommandCb_ || beaconCb_ || nwkCb_ ||
+              nwkCommandCb_ || apsCb_ || zdoCb_ || zclCb_) {
             MacDataFrame frame;
             if (ZigbeeMac::parseShortDataFrame(psdu, psduLen, frame)) {
               if (dataCb_) {
@@ -120,10 +120,18 @@ void CC2530Radio::feed(uint8_t b) {
                   nwkCommandCb_(frame, nwkCommand, rssi, lqi);
                 }
               }
-            } else if (macCommandCb_) {
-              MacCommandFrame command;
-              if (ZigbeeMac::parseCommandFrame(psdu, psduLen, command)) {
-                macCommandCb_(command, rssi, lqi);
+            } else {
+              if (macCommandCb_) {
+                MacCommandFrame command;
+                if (ZigbeeMac::parseCommandFrame(psdu, psduLen, command)) {
+                  macCommandCb_(command, rssi, lqi);
+                }
+              }
+              if (beaconCb_) {
+                MacBeaconFrame beacon;
+                if (ZigbeeMac::parseBeacon(psdu, psduLen, beacon)) {
+                  beaconCb_(beacon, rssi, lqi);
+                }
               }
             }
           }
@@ -292,6 +300,25 @@ bool CC2530Radio::sendAssociationResponse(uint16_t panId, uint64_t dstIeee,
   uint8_t psduLen = ZigbeeMac::buildAssociationResponse(
       psdu, sizeof(psdu), panId, dstIeee, srcShort, macSequence_++,
       assignedShort, status, ackRequest);
+  if (psduLen == 0) return false;
+  return send(psdu, psduLen);
+}
+
+bool CC2530Radio::sendBeaconRequest() {
+  uint8_t psdu[kMaxPayload];
+  uint8_t psduLen =
+      ZigbeeMac::buildBeaconRequest(psdu, sizeof(psdu), macSequence_++);
+  if (psduLen == 0) return false;
+  return send(psdu, psduLen);
+}
+
+bool CC2530Radio::sendBeacon(uint16_t panId, uint16_t srcShort,
+                             bool panCoordinator, bool associationPermit,
+                             const uint8_t* payload, uint8_t payloadLen) {
+  uint8_t psdu[kMaxPayload];
+  uint8_t psduLen = ZigbeeMac::buildBeacon(
+      psdu, sizeof(psdu), panId, srcShort, macSequence_++, panCoordinator,
+      associationPermit, payload, payloadLen);
   if (psduLen == 0) return false;
   return send(psdu, psduLen);
 }

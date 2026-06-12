@@ -82,7 +82,9 @@ uint16_t ZigbeeAddressAllocator::allocate(const ZigbeeNeighborTable& neighbors) 
 }
 
 ZigbeeNetwork::ZigbeeNetwork()
-    : info_(), neighbors_(nullptr), permitJoin_(), allocator_() {
+    : info_(), neighbors_(nullptr), permitJoin_(), allocator_(),
+      scanDeviceType_(ZB_DEVICE_UNKNOWN), joinAttempts_(0) {
+  clearCandidates();
   leave();
 }
 
@@ -238,6 +240,135 @@ bool ZigbeeNetwork::noteParent(uint16_t nwkAddress, uint64_t ieeeAddress,
       permitJoining, nowMs);
   if (!parent) return false;
   info_.parentAddress = nwkAddress;
+  return true;
+}
+
+void ZigbeeNetwork::clearCandidates() {
+  for (uint8_t i = 0; i < kMaxParentCandidates; ++i) {
+    candidates_[i] = ZigbeeParentCandidate();
+  }
+}
+
+void ZigbeeNetwork::beginScan(uint8_t deviceType) {
+  clearCandidates();
+  scanDeviceType_ = deviceType;
+  info_ = ZigbeeNetworkInfo();
+  info_.joined = false;
+  info_.state = ZB_NWK_STATE_SCANNING;
+  info_.deviceType = deviceType;
+  info_.panId = 0xFFFF;
+  info_.nwkAddress = ZB_NWK_ADDR_INVALID;
+  info_.parentAddress = ZB_NWK_ADDR_INVALID;
+  info_.depth = 0xFF;
+}
+
+bool ZigbeeNetwork::noteBeacon(uint8_t channel, const MacBeaconFrame& beacon,
+                               const NwkBeaconPayload& payload, int8_t rssi,
+                               uint8_t lqi, uint64_t requiredExtendedPanId) {
+  if (!beacon.valid || !payload.valid) return false;
+  if (requiredExtendedPanId != 0 &&
+      payload.extendedPanId != requiredExtendedPanId) {
+    return false;
+  }
+
+  // Deduplicate on channel + PAN + sender; keep the best-LQI sighting.
+  ZigbeeParentCandidate* slot = nullptr;
+  for (uint8_t i = 0; i < kMaxParentCandidates; ++i) {
+    ZigbeeParentCandidate& c = candidates_[i];
+    if (c.used && c.channel == channel && c.panId == beacon.srcPanId &&
+        c.shortAddress == beacon.srcShort) {
+      if (lqi < c.lqi) return true;  // already have a better sighting
+      slot = &c;
+      break;
+    }
+    if (!slot && !c.used) slot = &c;
+  }
+  if (!slot) {
+    // Table full: replace the weakest entry if this one is stronger.
+    ZigbeeParentCandidate* weakest = &candidates_[0];
+    for (uint8_t i = 1; i < kMaxParentCandidates; ++i) {
+      if (candidates_[i].lqi < weakest->lqi) weakest = &candidates_[i];
+    }
+    if (weakest->lqi >= lqi) return false;
+    slot = weakest;
+  }
+
+  slot->used = true;
+  slot->channel = channel;
+  slot->panId = beacon.srcPanId;
+  slot->extendedPanId = payload.extendedPanId;
+  slot->shortAddress = beacon.srcShort;
+  slot->depth = payload.deviceDepth;
+  slot->lqi = lqi;
+  slot->rssi = rssi;
+  slot->permitJoining = beacon.associationPermit;
+  slot->routerCapacity = payload.routerCapacity;
+  slot->endDeviceCapacity = payload.endDeviceCapacity;
+  slot->stackProfile = payload.stackProfile;
+  slot->updateId = payload.updateId;
+  return true;
+}
+
+uint8_t ZigbeeNetwork::candidateCount() const {
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < kMaxParentCandidates; ++i) {
+    if (candidates_[i].used) ++n;
+  }
+  return n;
+}
+
+const ZigbeeParentCandidate* ZigbeeNetwork::candidate(uint8_t index) const {
+  uint8_t n = 0;
+  for (uint8_t i = 0; i < kMaxParentCandidates; ++i) {
+    if (!candidates_[i].used) continue;
+    if (n == index) return &candidates_[i];
+    ++n;
+  }
+  return nullptr;
+}
+
+bool ZigbeeNetwork::candidateUsableFor(const ZigbeeParentCandidate& c,
+                                       uint8_t deviceType) const {
+  if (!c.used || !c.permitJoining) return false;
+  if (c.stackProfile != ZigbeeNwk::kStackProfilePro) return false;
+  if (deviceType == ZB_DEVICE_ROUTER) return c.routerCapacity;
+  if (deviceType == ZB_DEVICE_END_DEVICE) return c.endDeviceCapacity;
+  return false;
+}
+
+const ZigbeeParentCandidate* ZigbeeNetwork::selectParent() const {
+  const ZigbeeParentCandidate* best = nullptr;
+  for (uint8_t i = 0; i < kMaxParentCandidates; ++i) {
+    const ZigbeeParentCandidate& c = candidates_[i];
+    if (!candidateUsableFor(c, scanDeviceType_)) continue;
+    if (!best || c.lqi > best->lqi ||
+        (c.lqi == best->lqi && c.depth < best->depth)) {
+      best = &c;
+    }
+  }
+  return best;
+}
+
+bool ZigbeeNetwork::beginJoiningCandidate(const ZigbeeParentCandidate& parent) {
+  if (!parent.used) return false;
+  uint8_t deviceType = scanDeviceType_;
+  beginJoining(deviceType, parent.panId, parent.extendedPanId, parent.channel,
+               parent.shortAddress, parent.updateId);
+  return true;
+}
+
+bool ZigbeeNetwork::rejoinParent() {
+  // Needs a remembered network identity and parent from an earlier join.
+  if (info_.panId == 0xFFFF ||
+      info_.parentAddress == ZB_NWK_ADDR_INVALID ||
+      info_.deviceType == ZB_DEVICE_UNKNOWN ||
+      info_.deviceType == ZB_DEVICE_COORDINATOR) {
+    return false;
+  }
+  info_.joined = false;
+  info_.state = ZB_NWK_STATE_JOINING;
+  info_.nwkAddress = ZB_NWK_ADDR_INVALID;
+  info_.depth = 0xFF;
   return true;
 }
 
