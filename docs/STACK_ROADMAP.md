@@ -139,6 +139,10 @@ run TI Z-Stack or Zigbee PRO internally.
   join/link-status/route/ping flow runs encrypted with mic=0 rpl=0;
   a wrong-key joiner associates at MAC level but every NWK frame it sends
   is MIC-rejected)
+- Multi-hop: routers answer beacon requests + accept children (disjoint
+  address pool), and NWK unicast data forwarding to the route next hop with
+  per-hop re-encryption. The example scales to an A-B-C line; A-B verified,
+  full A-B-C pending a third board.
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`
@@ -190,6 +194,12 @@ while preserving the existing raw send / receive / sniffer APIs.
    APS fragmentation.
 7. **PAN ID conflict resolution and network update** (updateId / channel
    change propagation).
-8. **Multi-hop relay verification** - the intermediate-router code paths
-   (RREQ rebroadcast, RREP relay) compile and follow the spec but need a
-   third board+module to verify over the air.
+8. **Multi-hop relay** - DONE (code): routers answer beacon requests and
+   accept children from a disjoint address pool, NWK unicast data frames
+   whose destination is not the receiver are forwarded to the route's next
+   hop (radius-1, re-encrypted per hop), and RREQ rebroadcast / RREP relay
+   build the multi-hop routes. The `CC2530_BeaconJoin` example scales to an
+   A-B-C line (coordinator / router / end) with an optional range-simulation
+   ignore list so three co-located radios still form a 2-hop topology.
+   Coordinator+router (A-B) is hardware-verified; the full A-B-C run with a
+   third board+module is the remaining verification.

@@ -255,6 +255,16 @@ CC2530 module:
   `-DNIUS_ZIGBEE_WRONG_KEY=1` still associates at the MAC level but every
   NWK frame it sends is MIC-rejected (`mic=` climbs, `rx=` freezes, its
   link costs stay 0/0).
+- `CC2530_BeaconJoin` scales to a **multi-hop A-B-C line**: build the three
+  boards with `-DNIUS_ZIGBEE_THIS_NODE=0x0001/0x0002/0x0003` for
+  coordinator / router / end device. Routers answer beacon requests and
+  accept children from their own address pool, and unicast NWK data destined
+  elsewhere is forwarded to the route's next hop (radius-1, re-encrypted per
+  hop), so the end device reaches the coordinator through the router. An
+  optional range-simulation ignore list lets three co-located radios form a
+  real 2-hop topology. Verified on hardware so far: the router joins the
+  coordinator and becomes a parent (`children=1`, encrypted Link Status,
+  `mic=0`); the full A-B-C routed ping is the remaining bring-up step.
 - Promiscuous examples can still show unrelated 802.15.4 traffic on the channel;
   filtered examples program PAN/short/IEEE addresses before exchanging frames.
 
