@@ -22,6 +22,7 @@
 #include "ZigbeePersistence.h"
 #include "ZigbeeBindingTable.h"
 #include "ZigbeeApsFragment.h"
+#include "ZigbeeApsKey.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -92,6 +93,15 @@ using nzb::ZDO_UNBIND_RSP;
 using nzb::ZigbeeApsFragment;
 using nzb::ApsFragmentInfo;
 using nzb::ZigbeeApsReassembler;
+using nzb::ZigbeeApsKey;
+using nzb::ApsTransportKey;
+using nzb::ApsRequestKey;
+using nzb::APS_CMD_TRANSPORT_KEY;
+using nzb::APS_CMD_REQUEST_KEY;
+using nzb::APS_CMD_SWITCH_KEY;
+using nzb::APS_KEY_STANDARD_NETWORK;
+using nzb::APS_KEY_TC_LINK;
+using nzb::APS_KEY_APP_LINK;
 using nzb::ZdoAddressRequest;
 using nzb::ZdoAddressResponse;
 using nzb::ZdoActiveEndpointRequest;

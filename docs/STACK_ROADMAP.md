@@ -201,12 +201,16 @@ while preserving the existing raw send / receive / sniffer APIs.
 
 ## Remaining gaps toward Zigbee PRO (priority order)
 
-1. **Key transport** - the network key is currently pre-shared in the
-   sketch. Standard Trust Center behavior (transport the network key at
-   join time under a link key, key rotation via keySeq) is the next
-   security step. Frame-counter persistence also belongs here (today a
-   reboot restarts counters and peers compensate by resetting their replay
-   tables at join events).
+1. **Key transport** - command frames DONE; APS-layer encryption envelope is
+   the remaining integration. `ZigbeeApsKey` builds/parses the APS key
+   commands - Transport-Key (network key, 35 B), Request-Key (network or app
+   link key with partner), Switch-Key - and provides the default global TC
+   link key "ZigBeeAlliance09". `CC2530_KeyTransport` self-tests them
+   (10/10 PASS on hardware). What remains: encrypt the Transport-Key on air
+   at the APS layer under the link key (the CCM* primitive already exists in
+   `ZigbeeSecurity`; an APS nonce/AAD wrapper + the join-time handshake is the
+   wiring) and key rotation via keySeq. Frame-counter persistence is already
+   DONE (see item 5).
 2. **Broadcast Transaction Table** - broadcast dedup/passive ack. Required
    for correct multi-hop RREQ/broadcast behavior (the current discovery
    table only dedups route requests).
