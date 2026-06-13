@@ -356,6 +356,70 @@ bool ZigbeeZdo::parseDeviceAnnounce(const uint8_t* payload,
   return true;
 }
 
+// -- Binding (Bind_req / Unbind_req) --------------------------------------
+
+uint8_t ZigbeeZdo::buildBindRequest(uint8_t* out, uint8_t outMax,
+                                    const ZdoBindRequest& r, bool unbind) {
+  (void)unbind;  // same payload layout; the cluster id selects bind vs unbind
+  // seq1 src8 srcEp1 cluster2 mode1 (group2 | ieee8 ep1)
+  uint8_t needed = (r.dstAddrMode == kBindAddrModeGroup) ? 15 : 22;
+  if (!out || outMax < needed) return 0;
+
+  uint8_t* p = out;
+  *p++ = r.sequence;
+  writeLe64(p, r.srcAddress); p += 8;
+  *p++ = r.srcEndpoint;
+  writeLe16(p, r.clusterId); p += 2;
+  *p++ = r.dstAddrMode;
+  if (r.dstAddrMode == kBindAddrModeGroup) {
+    writeLe16(p, r.dstGroup); p += 2;
+  } else {
+    writeLe64(p, r.dstAddress); p += 8;
+    *p++ = r.dstEndpoint;
+  }
+  return (uint8_t)(p - out);
+}
+
+bool ZigbeeZdo::parseBindRequest(const uint8_t* payload, uint8_t payloadLen,
+                                 ZdoBindRequest& r) {
+  r = ZdoBindRequest();
+  if (!payload || payloadLen < 13) return false;  // through dstAddrMode
+  const uint8_t* p = payload;
+  r.sequence = *p++;
+  r.srcAddress = readLe64(p); p += 8;
+  r.srcEndpoint = *p++;
+  r.clusterId = readLe16(p); p += 2;
+  r.dstAddrMode = *p++;
+  if (r.dstAddrMode == kBindAddrModeGroup) {
+    if (payloadLen < 15) return false;
+    r.dstGroup = readLe16(p); p += 2;
+  } else if (r.dstAddrMode == kBindAddrModeIeee) {
+    if (payloadLen < 22) return false;
+    r.dstAddress = readLe64(p); p += 8;
+    r.dstEndpoint = *p++;
+  } else {
+    return false;
+  }
+  return true;
+}
+
+uint8_t ZigbeeZdo::buildBindResponse(uint8_t* out, uint8_t outMax,
+                                     uint8_t sequence, uint8_t status) {
+  if (!out || outMax < 2) return 0;
+  out[0] = sequence;
+  out[1] = status;
+  return 2;
+}
+
+bool ZigbeeZdo::parseBindResponse(const uint8_t* payload, uint8_t payloadLen,
+                                  ZdoBindResponse& response) {
+  response = ZdoBindResponse();
+  if (!payload || payloadLen < 2) return false;
+  response.sequence = payload[0];
+  response.status = payload[1];
+  return true;
+}
+
 // -- Network management (Mgmt_Lqi / Mgmt_Rtg) -----------------------------
 
 uint8_t ZigbeeZdo::buildMgmtLqiRequest(uint8_t* out, uint8_t outMax,

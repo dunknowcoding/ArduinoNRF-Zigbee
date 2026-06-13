@@ -19,6 +19,8 @@ enum ZdoClusterId : uint16_t {
   ZDO_ACTIVE_EP_REQ = 0x0005,
   ZDO_MATCH_DESC_REQ = 0x0006,
   ZDO_DEVICE_ANNCE = 0x0013,
+  ZDO_BIND_REQ = 0x0021,
+  ZDO_UNBIND_REQ = 0x0022,
   ZDO_MGMT_LQI_REQ = 0x0031,
   ZDO_MGMT_RTG_REQ = 0x0032,
   ZDO_MGMT_PERMIT_JOINING_REQ = 0x0036,
@@ -29,6 +31,8 @@ enum ZdoClusterId : uint16_t {
   ZDO_SIMPLE_DESC_RSP = 0x8004,
   ZDO_ACTIVE_EP_RSP = 0x8005,
   ZDO_MATCH_DESC_RSP = 0x8006,
+  ZDO_BIND_RSP = 0x8021,
+  ZDO_UNBIND_RSP = 0x8022,
   ZDO_MGMT_LQI_RSP = 0x8031,
   ZDO_MGMT_RTG_RSP = 0x8032,
   ZDO_MGMT_PERMIT_JOINING_RSP = 0x8036
@@ -132,6 +136,25 @@ struct ZdoDeviceAnnounce {
 struct ZdoMgmtRequest {
   uint8_t sequence;
   uint8_t startIndex;
+};
+
+// Bind_req / Unbind_req: tie (srcAddress, srcEndpoint, clusterId) to a
+// destination that is either a group (addrMode 0x01) or an IEEE+endpoint
+// (addrMode 0x03).
+struct ZdoBindRequest {
+  uint8_t sequence;
+  uint64_t srcAddress;
+  uint8_t srcEndpoint;
+  uint16_t clusterId;
+  uint8_t dstAddrMode;   // 0x01 group, 0x03 ieee+endpoint
+  uint16_t dstGroup;
+  uint64_t dstAddress;
+  uint8_t dstEndpoint;
+};
+
+struct ZdoBindResponse {
+  uint8_t sequence;
+  uint8_t status;
 };
 
 // One decoded entry of a Mgmt_Lqi_rsp neighbor table list (22 bytes on air).
@@ -270,6 +293,21 @@ class ZigbeeZdo {
                                      uint8_t capability);
   static bool parseDeviceAnnounce(const uint8_t* payload, uint8_t payloadLen,
                                   ZdoDeviceAnnounce& announce);
+
+  // -- Binding (Bind_req / Unbind_req) ------------------------------------
+
+  static const uint8_t kBindAddrModeGroup = 0x01;
+  static const uint8_t kBindAddrModeIeee = 0x03;
+
+  static uint8_t buildBindRequest(uint8_t* out, uint8_t outMax,
+                                  const ZdoBindRequest& request,
+                                  bool unbind = false);
+  static bool parseBindRequest(const uint8_t* payload, uint8_t payloadLen,
+                               ZdoBindRequest& request);
+  static uint8_t buildBindResponse(uint8_t* out, uint8_t outMax,
+                                   uint8_t sequence, uint8_t status);
+  static bool parseBindResponse(const uint8_t* payload, uint8_t payloadLen,
+                                ZdoBindResponse& response);
 
   // -- Network management (Mgmt_Lqi / Mgmt_Rtg) ---------------------------
 

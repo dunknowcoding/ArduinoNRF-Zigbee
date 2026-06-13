@@ -20,6 +20,7 @@
 #include "ZigbeeApsRetransmit.h"
 #include "ZigbeeApsDuplicateTable.h"
 #include "ZigbeePersistence.h"
+#include "ZigbeeBindingTable.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -77,6 +78,16 @@ using nzb::ZigbeeApsDuplicateTable;
 using nzb::ApsDupeEntry;
 using nzb::ZigbeePersistence;
 using nzb::ZigbeePersistentState;
+using nzb::ZigbeeBindingTable;
+using nzb::ZigbeeBinding;
+using nzb::ZB_BIND_ADDR_GROUP;
+using nzb::ZB_BIND_ADDR_IEEE;
+using nzb::ZdoBindRequest;
+using nzb::ZdoBindResponse;
+using nzb::ZDO_BIND_REQ;
+using nzb::ZDO_UNBIND_REQ;
+using nzb::ZDO_BIND_RSP;
+using nzb::ZDO_UNBIND_RSP;
 using nzb::ZdoAddressRequest;
 using nzb::ZdoAddressResponse;
 using nzb::ZdoActiveEndpointRequest;

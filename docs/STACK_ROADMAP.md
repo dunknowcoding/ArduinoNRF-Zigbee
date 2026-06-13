@@ -254,9 +254,15 @@ while preserving the existing raw send / receive / sniffer APIs.
    parent=0x0001 counter=1072 - skipping scan` and immediately resumes
    encrypted traffic. Remaining: persisting bindings + reporting config (once
    those tables exist).
-6. **Binding table + group addressing** and APS fragmentation. (APS
-   end-to-end acknowledgements/retries are DONE - see below; binding,
-   groups, and fragmentation remain.)
+6. **Binding table + group addressing** - DONE for the table and frames.
+   `ZigbeeBindingTable` is a local source-binding store (source endpoint +
+   cluster -> destination IEEE+endpoint or group) with idempotent add,
+   remove, and a `next()` iterator a sender uses to deliver to every bound
+   destination. `ZigbeeZdo` builds/parses Bind_req / Unbind_req (IEEE mode 22
+   B, group mode 15 B) and Bind_rsp. The `CC2530_Binding` example self-tests
+   the table and frame round-trips (13/13 PASS on hardware) and shows the
+   indirect-send walk. Remaining here: wiring the binding into an over-the-air
+   APSDE indirect transmit in the mesh example, and APS fragmentation.
 7. **PAN ID conflict resolution and network update** (updateId / channel
    change propagation).
 8. **Multi-hop relay** - DONE (code): routers answer beacon requests and
