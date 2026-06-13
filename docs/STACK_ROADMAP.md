@@ -224,12 +224,17 @@ while preserving the existing raw send / receive / sniffer APIs.
    neighbor table back and prints device-type / relationship / depth / LQI
    per entry; the addressed-node check makes only the request's target answer
    (the coordinator answered 40 requests in a run, where before the fix an
-   intermediate router also replied to a request meant for the coordinator).
-   Two follow-ups: Mgmt_Rtg example wiring, and an observed end-device
-   stability issue where the joiner re-associates and takes a fresh address
-   (0x0031 -> 0x0034 over a run) under heavy channel load, which makes the
-   multi-hop rsp chase a moving target - belongs with indirect-transmission /
-   keep-alive work.
+   intermediate router also replied to a request meant for the coordinator),
+   and the routed request/response carry a per-hop MAC ack like the data
+   plane. The end device is also marked RFD in its capability so a parent no
+   longer treats it as a router and ages it out - it now holds a stable short
+   address (0x0031) across a run with ~100% APS delivery, instead of taking a
+   fresh address each re-association. Two follow-ups remain: Mgmt_Rtg example
+   wiring, and the end device actually *receiving* the routed Mgmt_Lqi_rsp -
+   the coordinator answers every request (verified 40x) and the same A->B->C
+   path carries APS acks at ~100%, but the ZDO response's last hop is not yet
+   delivered/parsed at the end device. Needs a frame capture to isolate why a
+   ZDO APS frame forwards differently from an APS-data frame on that hop.
 5. **Persistence** - network identity, addresses, frame counters, bindings,
    and reporting config in nRF flash (NrfNvmc) so nodes survive reboots.
 6. **Binding table + group addressing** and APS fragmentation. (APS

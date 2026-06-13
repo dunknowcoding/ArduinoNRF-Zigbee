@@ -53,7 +53,11 @@ static const uint16_t THIS_NODE = NIUS_ZIGBEE_THIS_NODE;
 static const bool IS_COORDINATOR = ROLE_COORD;
 static const bool IS_PARENT_CAPABLE = ROLE_COORD || ROLE_ROUTER;
 static const uint64_t THIS_IEEE = 0x1A62195E00000000ULL | THIS_NODE;
-static const uint8_t JOINER_CAPABILITY = 0x8A;  // allocate addr, rx-on, FFD
+// RFD (end device) vs FFD (router): both rx-on + allocate-address. Marking the
+// end device as RFD keeps a parent from treating it as a router neighbor and
+// aging it out (routers are expected to send Link Status; an end device does
+// not), which otherwise forced a fresh address on every re-association.
+static const uint8_t JOINER_CAPABILITY = ROLE_END ? 0x88 : 0x8A;
 
 // Deterministic addresses so the range-sim ignore lists are simple:
 //   A pool 0x0001..0x000F -> B gets 0x0001
@@ -591,7 +595,8 @@ void serviceRouteDiscovery() {
       if (nh == ZigbeeRouting::kNoNextHop) nh = target;
       radio.sendZdoCommand(network.info().panId, nh, network.info().nwkAddress,
                            target, network.info().nwkAddress, ZDO_MGMT_LQI_REQ,
-                           payload, n, ZigbeeNwk::kDefaultRadius, false);
+                           payload, n, ZigbeeNwk::kDefaultRadius,
+                           /*macAck=*/true);  // per-hop MAC ack for the req
       Serial.print("Mgmt_Lqi_req try "); Serial.print(mgmtLqiTries);
       Serial.print(" -> 0x"); printHex16(target); Serial.println();
     }
@@ -662,7 +667,7 @@ void replyMgmtLqi(const MacDataFrame& mac, const NwkDataFrame& nwk,
   radio.sendZdoCommand(network.info().panId, nh, network.info().nwkAddress,
                        nwk.srcShort, network.info().nwkAddress,
                        ZDO_MGMT_LQI_RSP, payload, n, ZigbeeNwk::kDefaultRadius,
-                       false);
+                       /*macAck=*/true);   // per-hop MAC ack for the routed rsp
   Serial.print("Mgmt_Lqi_req from 0x"); printHex16(nwk.srcShort);
   Serial.print(" -> rsp with "); Serial.print(listCount);
   Serial.print("/"); Serial.print(total);
