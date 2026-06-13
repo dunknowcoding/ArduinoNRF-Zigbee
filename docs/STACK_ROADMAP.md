@@ -262,7 +262,17 @@ while preserving the existing raw send / receive / sniffer APIs.
    B, group mode 15 B) and Bind_rsp. The `CC2530_Binding` example self-tests
    the table and frame round-trips (13/13 PASS on hardware) and shows the
    indirect-send walk. Remaining here: wiring the binding into an over-the-air
-   APSDE indirect transmit in the mesh example, and APS fragmentation.
+   APSDE indirect transmit in the mesh example.
+   **APS fragmentation - DONE.** `ZigbeeApsFragment` builds/parses fragment
+   APDUs (APS extended header: extFCF first/subsequent + block number; first
+   fragment carries the total block count), and `ZigbeeApsReassembler`
+   reassembles by block number with a caller-supplied block size so
+   out-of-order and duplicate blocks are handled. The `CC2530_Fragmentation`
+   example self-tests a 180 B ASDU -> 5 fragments -> reassembly in order,
+   reversed, and with a duplicate block (6/6 PASS on hardware). This is the
+   general fix for long frames over the air, including the long Mgmt_Lqi
+   response - wiring fragmentation into the multi-hop send/receive path is the
+   remaining integration step.
 7. **PAN ID conflict resolution and network update** (updateId / channel
    change propagation).
 8. **Multi-hop relay** - DONE (code): routers answer beacon requests and

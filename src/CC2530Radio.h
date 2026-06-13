@@ -21,6 +21,7 @@
 #include "ZigbeeApsDuplicateTable.h"
 #include "ZigbeePersistence.h"
 #include "ZigbeeBindingTable.h"
+#include "ZigbeeApsFragment.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -88,6 +89,9 @@ using nzb::ZDO_BIND_REQ;
 using nzb::ZDO_UNBIND_REQ;
 using nzb::ZDO_BIND_RSP;
 using nzb::ZDO_UNBIND_RSP;
+using nzb::ZigbeeApsFragment;
+using nzb::ApsFragmentInfo;
+using nzb::ZigbeeApsReassembler;
 using nzb::ZdoAddressRequest;
 using nzb::ZdoAddressResponse;
 using nzb::ZdoActiveEndpointRequest;
