@@ -230,11 +230,17 @@ while preserving the existing raw send / receive / sniffer APIs.
    longer treats it as a router and ages it out - it now holds a stable short
    address (0x0031) across a run with ~100% APS delivery, instead of taking a
    fresh address each re-association. Two follow-ups remain: Mgmt_Rtg example
-   wiring, and the end device actually *receiving* the routed Mgmt_Lqi_rsp -
-   the coordinator answers every request (verified 40x) and the same A->B->C
-   path carries APS acks at ~100%, but the ZDO response's last hop is not yet
-   delivered/parsed at the end device. Needs a frame capture to isolate why a
-   ZDO APS frame forwards differently from an APS-data frame on that hop.
+   wiring, and the end device actually *receiving* the routed Mgmt_Lqi_rsp.
+   Diagnosed: the response never reaches the end device's NWK layer at all
+   (the end device sees the short APS data/ack frames at cluster 0x1042 but
+   never the 0x8031 response). sendZdoCommand routes through the same
+   sendNwkData as the data plane, so the difference is that the response is a
+   longer single-shot frame (~61 B encrypted vs ~34 B for an APS ack) with no
+   end-to-end retransmit, sent by a coordinator that is busy half-duplex under
+   the request/data/ack/link-status load (and replyMgmtLqi does not check the
+   TX return). Fix path: APS-acked ZDO (end-to-end retransmit like the data
+   plane), or check the rsp TX result and retry, or shorten/paginate the
+   response - a dedicated follow-up.
 5. **Persistence** - network identity, addresses, frame counters, bindings,
    and reporting config in nRF flash (NrfNvmc) so nodes survive reboots.
 6. **Binding table + group addressing** and APS fragmentation. (APS
