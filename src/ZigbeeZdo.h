@@ -19,13 +19,19 @@ enum ZdoClusterId : uint16_t {
   ZDO_ACTIVE_EP_REQ = 0x0005,
   ZDO_MATCH_DESC_REQ = 0x0006,
   ZDO_DEVICE_ANNCE = 0x0013,
+  ZDO_MGMT_LQI_REQ = 0x0031,
+  ZDO_MGMT_RTG_REQ = 0x0032,
+  ZDO_MGMT_PERMIT_JOINING_REQ = 0x0036,
 
   ZDO_NWK_ADDR_RSP = 0x8000,
   ZDO_IEEE_ADDR_RSP = 0x8001,
   ZDO_NODE_DESC_RSP = 0x8002,
   ZDO_SIMPLE_DESC_RSP = 0x8004,
   ZDO_ACTIVE_EP_RSP = 0x8005,
-  ZDO_MATCH_DESC_RSP = 0x8006
+  ZDO_MATCH_DESC_RSP = 0x8006,
+  ZDO_MGMT_LQI_RSP = 0x8031,
+  ZDO_MGMT_RTG_RSP = 0x8032,
+  ZDO_MGMT_PERMIT_JOINING_RSP = 0x8036
 };
 
 enum ZdoStatus : uint8_t {
@@ -120,6 +126,53 @@ struct ZdoDeviceAnnounce {
   uint16_t nwkAddress;
   uint64_t ieeeAddress;
   uint8_t capability;
+};
+
+// Mgmt_Lqi_req / Mgmt_Rtg_req share a single StartIndex byte.
+struct ZdoMgmtRequest {
+  uint8_t sequence;
+  uint8_t startIndex;
+};
+
+// One decoded entry of a Mgmt_Lqi_rsp neighbor table list (22 bytes on air).
+struct ZdoNeighborListEntry {
+  uint64_t extendedPanId;
+  uint64_t extendedAddress;
+  uint16_t nwkAddress;
+  uint8_t deviceType;     // 0 coordinator, 1 router, 2 end device, 3 unknown
+  uint8_t rxOnWhenIdle;   // 0 off, 1 on, 2 unknown
+  uint8_t relationship;   // 0 parent, 1 child, 2 sibling, 3 none, 4 prev child
+  uint8_t permitJoining;  // 0 no, 1 yes, 2 unknown
+  uint8_t depth;
+  uint8_t lqi;
+};
+
+struct ZdoMgmtLqiResponse {
+  uint8_t sequence;
+  uint8_t status;
+  uint8_t neighborTableEntries;  // total entries the responder holds
+  uint8_t startIndex;
+  uint8_t listCount;             // entries carried in this response
+  const uint8_t* list;           // raw list; use getNeighborListEntry()
+};
+
+// One decoded entry of a Mgmt_Rtg_rsp routing table list (5 bytes on air).
+struct ZdoRoutingListEntry {
+  uint16_t destinationAddress;
+  uint8_t status;        // 0 active, 1 discovery underway, 2 failed, 3 inactive
+  bool memoryConstrained;
+  bool manyToOne;
+  bool routeRecordRequired;
+  uint16_t nextHopAddress;
+};
+
+struct ZdoMgmtRtgResponse {
+  uint8_t sequence;
+  uint8_t status;
+  uint8_t routingTableEntries;
+  uint8_t startIndex;
+  uint8_t listCount;
+  const uint8_t* list;
 };
 
 class ZigbeeZdo {
@@ -217,6 +270,40 @@ class ZigbeeZdo {
                                      uint8_t capability);
   static bool parseDeviceAnnounce(const uint8_t* payload, uint8_t payloadLen,
                                   ZdoDeviceAnnounce& announce);
+
+  // -- Network management (Mgmt_Lqi / Mgmt_Rtg) ---------------------------
+
+  static const uint8_t kNeighborEntryLen = 22;
+  static const uint8_t kRoutingEntryLen = 5;
+
+  static uint8_t buildMgmtLqiRequest(uint8_t* out, uint8_t outMax,
+                                     uint8_t sequence, uint8_t startIndex);
+  static uint8_t buildMgmtRtgRequest(uint8_t* out, uint8_t outMax,
+                                     uint8_t sequence, uint8_t startIndex);
+  static bool parseMgmtRequest(const uint8_t* payload, uint8_t payloadLen,
+                               ZdoMgmtRequest& request);
+
+  static uint8_t buildMgmtLqiResponse(uint8_t* out, uint8_t outMax,
+                                      uint8_t sequence, uint8_t status,
+                                      uint8_t neighborTableEntries,
+                                      uint8_t startIndex,
+                                      const ZdoNeighborListEntry* entries,
+                                      uint8_t listCount);
+  static bool parseMgmtLqiResponse(const uint8_t* payload, uint8_t payloadLen,
+                                   ZdoMgmtLqiResponse& response);
+  static bool getNeighborListEntry(const ZdoMgmtLqiResponse& response,
+                                   uint8_t index, ZdoNeighborListEntry& entry);
+
+  static uint8_t buildMgmtRtgResponse(uint8_t* out, uint8_t outMax,
+                                      uint8_t sequence, uint8_t status,
+                                      uint8_t routingTableEntries,
+                                      uint8_t startIndex,
+                                      const ZdoRoutingListEntry* entries,
+                                      uint8_t listCount);
+  static bool parseMgmtRtgResponse(const uint8_t* payload, uint8_t payloadLen,
+                                   ZdoMgmtRtgResponse& response);
+  static bool getRoutingListEntry(const ZdoMgmtRtgResponse& response,
+                                  uint8_t index, ZdoRoutingListEntry& entry);
 
  private:
   static uint16_t readLe16(const uint8_t* p) {

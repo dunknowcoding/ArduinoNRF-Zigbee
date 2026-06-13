@@ -214,8 +214,22 @@ while preserving the existing raw send / receive / sniffer APIs.
    queue plus MAC Data Request handling so rx-off children can poll.
    Needs CC2530 firmware support for the pending bit in acks (or host
    emulation with relaxed timing).
-4. **ZDO Mgmt_Lqi_rsp / Mgmt_Rtg_rsp** - expose our neighbor/route tables
-   to standard Zigbee network-mapping tools.
+4. **ZDO Mgmt_Lqi_rsp / Mgmt_Rtg_rsp** - DONE (frame tooling +
+   Mgmt_Lqi HW-verified). `ZigbeeZdo` builds/parses Mgmt_Lqi_req /
+   Mgmt_Lqi_rsp / Mgmt_Rtg_req / Mgmt_Rtg_rsp with neighbor-list (22 B) and
+   routing-list (5 B) entry encode/decode. `CC2530_BeaconJoin`: the end
+   device queries the coordinator's neighbor table over the routed mesh and
+   re-sends the request until the response arrives (the rsp is the ack - ZDO
+   frames carry no APS ack here). HW-verified: the end device reads a
+   neighbor table back and prints device-type / relationship / depth / LQI
+   per entry; the addressed-node check makes only the request's target answer
+   (the coordinator answered 40 requests in a run, where before the fix an
+   intermediate router also replied to a request meant for the coordinator).
+   Two follow-ups: Mgmt_Rtg example wiring, and an observed end-device
+   stability issue where the joiner re-associates and takes a fresh address
+   (0x0031 -> 0x0034 over a run) under heavy channel load, which makes the
+   multi-hop rsp chase a moving target - belongs with indirect-transmission /
+   keep-alive work.
 5. **Persistence** - network identity, addresses, frame counters, bindings,
    and reporting config in nRF flash (NrfNvmc) so nodes survive reboots.
 6. **Binding table + group addressing** and APS fragmentation. (APS

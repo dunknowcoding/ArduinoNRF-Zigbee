@@ -126,6 +126,12 @@ static const uint16_t APS_CLUSTER = 0x1042;   // a private test cluster
 static const uint16_t APS_PROFILE = 0x0104;   // Home Automation
 uint8_t apsCounter = 0;
 uint32_t apsSeq = 0, nextApsSendAt = 0;
+// Application-level reliable ZDO query: the Mgmt_Lqi_rsp is the acknowledgement,
+// so re-send the request until it arrives (ZDO frames carry no APS ack here).
+uint32_t nextMgmtLqiCycleAt = 20000;  // start a fresh query 20 s after boot
+bool mgmtLqiPending = false;
+uint32_t mgmtLqiRetryAt = 0;
+uint8_t mgmtLqiSeq = 0, mgmtLqiTries = 0;
 
 const char* roleName() {
   return ROLE_COORD ? "A/coordinator" : ROLE_ROUTER ? "B/router" : "C/end";
@@ -561,6 +567,35 @@ void serviceRouteDiscovery() {
     apsRetx.markAttempted(due, millis());
     Serial.print("APS retransmit cnt="); Serial.println(due->apsCounter);
   }
+
+  // Periodically map the network: ask the coordinator for its neighbor table
+  // (standard Mgmt_Lqi_req), re-sending until the rsp comes back.
+  if (!mgmtLqiPending && (int32_t)(millis() - nextMgmtLqiCycleAt) >= 0) {
+    mgmtLqiPending = true;
+    mgmtLqiTries = 0;
+    mgmtLqiSeq = zdoSequence++;
+    mgmtLqiRetryAt = millis();
+    nextMgmtLqiCycleAt = millis() + 30000;
+  }
+  if (mgmtLqiPending && (int32_t)(millis() - mgmtLqiRetryAt) >= 0) {
+    if (mgmtLqiTries >= 12) {
+      mgmtLqiPending = false;
+      Serial.println("Mgmt_Lqi: no rsp after 12 tries, giving up");
+    } else {
+      ++mgmtLqiTries;
+      mgmtLqiRetryAt = millis() + 1500;
+      uint8_t payload[2];
+      uint8_t n = ZigbeeZdo::buildMgmtLqiRequest(payload, sizeof(payload),
+                                                 mgmtLqiSeq, 0);
+      uint16_t nh = routing.nextHopFor(target);
+      if (nh == ZigbeeRouting::kNoNextHop) nh = target;
+      radio.sendZdoCommand(network.info().panId, nh, network.info().nwkAddress,
+                           target, network.info().nwkAddress, ZDO_MGMT_LQI_REQ,
+                           payload, n, ZigbeeNwk::kDefaultRadius, false);
+      Serial.print("Mgmt_Lqi_req try "); Serial.print(mgmtLqiTries);
+      Serial.print(" -> 0x"); printHex16(target); Serial.println();
+    }
+  }
 }
 
 void serviceLinkStatusAndAging() {
@@ -589,18 +624,94 @@ void serviceLinkStatusAndAging() {
   }
 }
 
+// Answer a Mgmt_Lqi_req with our neighbor table (a standard Zigbee
+// network-management query - this is what a coordinator/mapping tool uses to
+// walk the mesh).
+void replyMgmtLqi(const MacDataFrame& mac, const NwkDataFrame& nwk,
+                  const ApsDataFrame& aps) {
+  ZdoMgmtRequest req;
+  if (!ZigbeeZdo::parseMgmtRequest(aps.payload, aps.payloadLen, req)) return;
+
+  ZdoNeighborListEntry entries[4];
+  uint8_t total = 0, listCount = 0;
+  for (uint8_t i = 0; i < neighbors.capacity(); ++i) {
+    const ZigbeeNeighbor* nb = neighbors.slot(i);
+    if (!nb || !nb->used) continue;
+    ++total;
+    if (total <= req.startIndex || listCount >= 4) continue;
+    ZdoNeighborListEntry& e = entries[listCount++];
+    e.extendedPanId = 0;  // not tracked per-neighbor here
+    e.extendedAddress = nb->ieeeAddress;
+    e.nwkAddress = nb->nwkAddress;
+    e.deviceType = nb->deviceType;
+    e.rxOnWhenIdle = nb->rxOnWhenIdle ? 1 : 0;
+    e.relationship = nb->relationship;
+    e.permitJoining = nb->permitJoining ? 1 : 0;
+    e.depth = nb->depth;
+    e.lqi = nb->lqi;
+  }
+
+  uint8_t payload[ZigbeeZdo::kMaxPayload];
+  uint8_t n = ZigbeeZdo::buildMgmtLqiResponse(payload, sizeof(payload),
+                                              req.sequence, ZDO_STATUS_SUCCESS,
+                                              total, req.startIndex, entries,
+                                              listCount);
+  if (n == 0) return;
+  uint16_t nh = routing.nextHopFor(nwk.srcShort);
+  if (nh == ZigbeeRouting::kNoNextHop) nh = mac.srcShort;
+  radio.sendZdoCommand(network.info().panId, nh, network.info().nwkAddress,
+                       nwk.srcShort, network.info().nwkAddress,
+                       ZDO_MGMT_LQI_RSP, payload, n, ZigbeeNwk::kDefaultRadius,
+                       false);
+  Serial.print("Mgmt_Lqi_req from 0x"); printHex16(nwk.srcShort);
+  Serial.print(" -> rsp with "); Serial.print(listCount);
+  Serial.print("/"); Serial.print(total);
+  Serial.print(" neighbor(s) via 0x"); printHex16(nh); Serial.println();
+}
+
+// Print the neighbor table a Mgmt_Lqi_rsp brought back.
+void printMgmtLqiRsp(const NwkDataFrame& nwk, const ApsDataFrame& aps) {
+  ZdoMgmtLqiResponse rsp;
+  if (!ZigbeeZdo::parseMgmtLqiResponse(aps.payload, aps.payloadLen, rsp)) return;
+  if (rsp.sequence == mgmtLqiSeq) mgmtLqiPending = false;  // the rsp is the ack
+  Serial.print("Mgmt_Lqi_rsp from 0x"); printHex16(nwk.srcShort);
+  Serial.print(": "); Serial.print(rsp.neighborTableEntries);
+  Serial.println(" neighbor(s) total");
+  for (uint8_t i = 0; i < rsp.listCount; ++i) {
+    ZdoNeighborListEntry e;
+    if (!ZigbeeZdo::getNeighborListEntry(rsp, i, e)) break;
+    Serial.print("  0x"); printHex16(e.nwkAddress);
+    Serial.print(" type="); Serial.print(e.deviceType);
+    Serial.print(" rel="); Serial.print(e.relationship);
+    Serial.print(" depth="); Serial.print(e.depth);
+    Serial.print(" lqi="); Serial.println(e.lqi);
+  }
+}
+
 void onZdoFrame(const MacDataFrame& mac, const NwkDataFrame& nwk,
                 const ApsDataFrame& aps, int8_t rssi, uint8_t lqi) {
-  (void)mac; (void)rssi;
-  if (!IS_PARENT_CAPABLE || aps.clusterId != ZDO_DEVICE_ANNCE) return;
-  ZdoDeviceAnnounce announce;
-  if (!ZigbeeZdo::parseDeviceAnnounce(aps.payload, aps.payloadLen, announce)) return;
-  neighbors.upsert(announce.nwkAddress, announce.ieeeAddress, ZB_DEVICE_ROUTER,
-                   ZB_REL_CHILD, network.info().depth + 1, lqi & 0x7F, true, false);
-  Serial.print("ZDO Device_annce nwk=0x"); printHex16(announce.nwkAddress);
-  Serial.print(" ieee=0x"); printHex64(announce.ieeeAddress);
-  Serial.print(" src=0x"); printHex16(nwk.srcShort);
-  Serial.println();
+  (void)rssi;
+
+  // Device_annce is a broadcast every parent records. The Mgmt_* unicasts are
+  // only acted on by their addressed node - otherwise a relay (which also
+  // sees the frame as it forwards) would answer a request meant for someone
+  // else, as an intermediate router was observed doing.
+  bool forUs = (nwk.dstShort == network.info().nwkAddress);
+
+  if (aps.clusterId == ZDO_DEVICE_ANNCE && IS_PARENT_CAPABLE) {
+    ZdoDeviceAnnounce announce;
+    if (!ZigbeeZdo::parseDeviceAnnounce(aps.payload, aps.payloadLen, announce)) return;
+    neighbors.upsert(announce.nwkAddress, announce.ieeeAddress, ZB_DEVICE_ROUTER,
+                     ZB_REL_CHILD, network.info().depth + 1, lqi & 0x7F, true, false);
+    Serial.print("ZDO Device_annce nwk=0x"); printHex16(announce.nwkAddress);
+    Serial.print(" ieee=0x"); printHex64(announce.ieeeAddress);
+    Serial.print(" src=0x"); printHex16(nwk.srcShort);
+    Serial.println();
+  } else if (aps.clusterId == ZDO_MGMT_LQI_REQ && forUs) {
+    replyMgmtLqi(mac, nwk, aps);
+  } else if (aps.clusterId == ZDO_MGMT_LQI_RSP && forUs) {
+    printMgmtLqiRsp(nwk, aps);
+  }
 }
 
 void setup() {

@@ -356,4 +356,153 @@ bool ZigbeeZdo::parseDeviceAnnounce(const uint8_t* payload,
   return true;
 }
 
+// -- Network management (Mgmt_Lqi / Mgmt_Rtg) -----------------------------
+
+uint8_t ZigbeeZdo::buildMgmtLqiRequest(uint8_t* out, uint8_t outMax,
+                                       uint8_t sequence, uint8_t startIndex) {
+  if (!out || outMax < 2) return 0;
+  out[0] = sequence;
+  out[1] = startIndex;
+  return 2;
+}
+
+uint8_t ZigbeeZdo::buildMgmtRtgRequest(uint8_t* out, uint8_t outMax,
+                                       uint8_t sequence, uint8_t startIndex) {
+  return buildMgmtLqiRequest(out, outMax, sequence, startIndex);
+}
+
+bool ZigbeeZdo::parseMgmtRequest(const uint8_t* payload, uint8_t payloadLen,
+                                 ZdoMgmtRequest& request) {
+  request = ZdoMgmtRequest();
+  if (!payload || payloadLen < 2) return false;
+  request.sequence = payload[0];
+  request.startIndex = payload[1];
+  return true;
+}
+
+uint8_t ZigbeeZdo::buildMgmtLqiResponse(uint8_t* out, uint8_t outMax,
+                                        uint8_t sequence, uint8_t status,
+                                        uint8_t neighborTableEntries,
+                                        uint8_t startIndex,
+                                        const ZdoNeighborListEntry* entries,
+                                        uint8_t listCount) {
+  if (!out) return 0;
+  if (listCount > 0 && !entries) return 0;
+  uint16_t needed = (uint16_t)5 + (uint16_t)listCount * kNeighborEntryLen;
+  if (outMax < needed) return 0;
+
+  out[0] = sequence;
+  out[1] = status;
+  out[2] = neighborTableEntries;
+  out[3] = startIndex;
+  out[4] = listCount;
+  uint8_t* p = &out[5];
+  for (uint8_t i = 0; i < listCount; ++i) {
+    const ZdoNeighborListEntry& e = entries[i];
+    writeLe64(&p[0], e.extendedPanId);
+    writeLe64(&p[8], e.extendedAddress);
+    writeLe16(&p[16], e.nwkAddress);
+    p[18] = (uint8_t)((e.deviceType & 0x03) | ((e.rxOnWhenIdle & 0x03) << 2) |
+                      ((e.relationship & 0x07) << 4));
+    p[19] = (uint8_t)(e.permitJoining & 0x03);
+    p[20] = e.depth;
+    p[21] = e.lqi;
+    p += kNeighborEntryLen;
+  }
+  return (uint8_t)needed;
+}
+
+bool ZigbeeZdo::parseMgmtLqiResponse(const uint8_t* payload, uint8_t payloadLen,
+                                     ZdoMgmtLqiResponse& response) {
+  response = ZdoMgmtLqiResponse();
+  if (!payload || payloadLen < 5) return false;
+  response.sequence = payload[0];
+  response.status = payload[1];
+  response.neighborTableEntries = payload[2];
+  response.startIndex = payload[3];
+  response.listCount = payload[4];
+  if (payloadLen < (uint16_t)5 + (uint16_t)response.listCount * kNeighborEntryLen) {
+    return false;
+  }
+  response.list = &payload[5];
+  return true;
+}
+
+bool ZigbeeZdo::getNeighborListEntry(const ZdoMgmtLqiResponse& response,
+                                     uint8_t index,
+                                     ZdoNeighborListEntry& entry) {
+  entry = ZdoNeighborListEntry();
+  if (!response.list || index >= response.listCount) return false;
+  const uint8_t* p = &response.list[(uint16_t)index * kNeighborEntryLen];
+  entry.extendedPanId = readLe64(&p[0]);
+  entry.extendedAddress = readLe64(&p[8]);
+  entry.nwkAddress = readLe16(&p[16]);
+  entry.deviceType = (uint8_t)(p[18] & 0x03);
+  entry.rxOnWhenIdle = (uint8_t)((p[18] >> 2) & 0x03);
+  entry.relationship = (uint8_t)((p[18] >> 4) & 0x07);
+  entry.permitJoining = (uint8_t)(p[19] & 0x03);
+  entry.depth = p[20];
+  entry.lqi = p[21];
+  return true;
+}
+
+uint8_t ZigbeeZdo::buildMgmtRtgResponse(uint8_t* out, uint8_t outMax,
+                                        uint8_t sequence, uint8_t status,
+                                        uint8_t routingTableEntries,
+                                        uint8_t startIndex,
+                                        const ZdoRoutingListEntry* entries,
+                                        uint8_t listCount) {
+  if (!out) return 0;
+  if (listCount > 0 && !entries) return 0;
+  uint16_t needed = (uint16_t)5 + (uint16_t)listCount * kRoutingEntryLen;
+  if (outMax < needed) return 0;
+
+  out[0] = sequence;
+  out[1] = status;
+  out[2] = routingTableEntries;
+  out[3] = startIndex;
+  out[4] = listCount;
+  uint8_t* p = &out[5];
+  for (uint8_t i = 0; i < listCount; ++i) {
+    const ZdoRoutingListEntry& e = entries[i];
+    writeLe16(&p[0], e.destinationAddress);
+    p[2] = (uint8_t)((e.status & 0x07) | (e.memoryConstrained ? 0x08 : 0) |
+                     (e.manyToOne ? 0x10 : 0) |
+                     (e.routeRecordRequired ? 0x20 : 0));
+    writeLe16(&p[3], e.nextHopAddress);
+    p += kRoutingEntryLen;
+  }
+  return (uint8_t)needed;
+}
+
+bool ZigbeeZdo::parseMgmtRtgResponse(const uint8_t* payload, uint8_t payloadLen,
+                                     ZdoMgmtRtgResponse& response) {
+  response = ZdoMgmtRtgResponse();
+  if (!payload || payloadLen < 5) return false;
+  response.sequence = payload[0];
+  response.status = payload[1];
+  response.routingTableEntries = payload[2];
+  response.startIndex = payload[3];
+  response.listCount = payload[4];
+  if (payloadLen < (uint16_t)5 + (uint16_t)response.listCount * kRoutingEntryLen) {
+    return false;
+  }
+  response.list = &payload[5];
+  return true;
+}
+
+bool ZigbeeZdo::getRoutingListEntry(const ZdoMgmtRtgResponse& response,
+                                    uint8_t index, ZdoRoutingListEntry& entry) {
+  entry = ZdoRoutingListEntry();
+  if (!response.list || index >= response.listCount) return false;
+  const uint8_t* p = &response.list[(uint16_t)index * kRoutingEntryLen];
+  entry.destinationAddress = readLe16(&p[0]);
+  entry.status = (uint8_t)(p[2] & 0x07);
+  entry.memoryConstrained = (p[2] & 0x08) != 0;
+  entry.manyToOne = (p[2] & 0x10) != 0;
+  entry.routeRecordRequired = (p[2] & 0x20) != 0;
+  entry.nextHopAddress = readLe16(&p[3]);
+  return true;
+}
+
 }  // namespace nzb
