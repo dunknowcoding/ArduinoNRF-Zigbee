@@ -258,6 +258,7 @@ class CC2530Radio {
   uint64_t securityIeee_;
   uint32_t securityCounter_;
   uint8_t securedScratch_[140];
+  bool promiscuous_ = false;  // true while frame filter is off (active scan)
 
   /** NWK header length from the frame-control IEEE-address bits. */
   static uint8_t nwkHeaderLength(const uint8_t* npdu, uint8_t len);

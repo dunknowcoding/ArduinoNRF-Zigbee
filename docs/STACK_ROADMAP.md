@@ -139,10 +139,20 @@ run TI Z-Stack or Zigbee PRO internally.
   join/link-status/route/ping flow runs encrypted with mic=0 rpl=0;
   a wrong-key joiner associates at MAC level but every NWK frame it sends
   is MIC-rejected)
-- Multi-hop: routers answer beacon requests + accept children (disjoint
-  address pool), and NWK unicast data forwarding to the route next hop with
-  per-hop re-encryption. The example scales to an A-B-C line; A-B verified,
-  full A-B-C pending a third board.
+- Multi-hop (HW-verified on a 3-board A-B-C line): routers answer beacon
+  requests + accept children from a disjoint address pool; NWK unicast data
+  is forwarded to the route next hop with radius decrement and per-hop
+  re-encryption; relays and endpoints learn reverse routes from received
+  frames (source NWK address via the previous-hop MAC neighbor). With A and
+  C simulated out of range of each other, C joins **through** router B, and
+  an encrypted routed ping/pong completes the full C->B->A->B->C round trip
+  (mic=0 on the verified hops). Per-hop FCS/MIC loss without a NWK-layer ack
+  still drops some round trips - end-to-end reliability is the next item.
+- `CC2530Radio` promiscuous-state tracking: decryption is skipped while the
+  frame filter is off (active scan), and `configureMac(kMacFilter)` clears
+  the promiscuous flag so a coordinator that never calls `setPromiscuous`
+  still decrypts. (Fixes a one-way-link bug where the coordinator silently
+  skipped all decryption.)
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`

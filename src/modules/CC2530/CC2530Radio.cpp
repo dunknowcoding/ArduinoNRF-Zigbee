@@ -94,8 +94,13 @@ void CC2530Radio::feed(uint8_t b) {
               const uint8_t* npdu = frame.payload;
               uint8_t npduLen = frame.payloadLen;
               bool nwkDrop = false;
-              if (security_ && security_->hasKey() && npduLen >= 8 &&
-                  (npdu[1] & 0x02) != 0) {
+              // Skip decryption while promiscuous (active scan): the frame
+              // filter is off so we hear other networks' secured frames, and
+              // the CC2530 keeps the FCS in the PSDU in this mode, which would
+              // misplace the trailing MIC and inflate the failure count. Real
+              // decryption resumes once we join and re-enable the filter.
+              if (security_ && security_->hasKey() && !promiscuous_ &&
+                  npduLen >= 8 && (npdu[1] & 0x02) != 0) {
                 uint8_t headerLen = nwkHeaderLength(npdu, npduLen);
                 uint8_t n = security_->openNpdu(npdu, npduLen, headerLen,
                                                 securedScratch_,
@@ -229,6 +234,7 @@ bool CC2530Radio::setPromiscuous(bool on) {
   // The firmware writes this value directly to FRMFILT0 bit 0:
   // 0 = frame filter disabled (promiscuous), 1 = frame filter enabled.
   uint8_t v = on ? 0 : 1;
+  promiscuous_ = on;
   sendFrame(CMD_SET_PROMISC, &v, 1);
   return waitResp(RSP_OK, 300);
 }
@@ -250,6 +256,12 @@ bool CC2530Radio::configureMac(uint8_t flags, uint8_t retries) {
       (uint8_t)(flags & (kMacFilter | kMacAutoAck | kMacCcaTx)),
       retries
   };
+  // Enabling the hardware frame filter is the opposite of promiscuous mode;
+  // keep the cached flag in sync so NWK decryption (gated on !promiscuous_)
+  // resumes. Without this a coordinator that only ever calls configureMac()
+  // - never setPromiscuous(false) - would stay flagged promiscuous from the
+  // setPromiscuous(true) in begin() and silently skip all decryption.
+  if (flags & kMacFilter) promiscuous_ = false;
   sendFrame(CMD_SET_MAC, d, sizeof(d));
   return waitResp(RSP_OK, 300);
 }

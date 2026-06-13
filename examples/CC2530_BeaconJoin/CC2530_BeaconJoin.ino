@@ -217,6 +217,8 @@ void onMacCommand(const MacCommandFrame& frame, int8_t rssi, uint8_t lqi) {
       routes.upsert(ZB_NWK_ADDR_COORDINATOR, chosenParent.shortAddress,
                     ZB_ROUTE_ACTIVE);
       applyAddress(chosenParent.panId, response.shortAddress);
+      radio.setPromiscuous(false);  // join done: enable the MAC address filter
+                                    // (also re-enables NWK decryption)
       Serial.print("JOINED via 0x");
       printHex16(chosenParent.shortAddress);
       Serial.print(" pan=0x");
@@ -386,6 +388,16 @@ void onNwkData(const MacDataFrame& mac, const NwkDataFrame& nwk, int8_t rssi,
   (void)rssi; (void)lqi;
   if (!network.isJoined()) return;
   if (ignoredShort(mac.srcShort)) return;
+
+  // Reverse-route learning: a frame from NWK source S that arrived via MAC
+  // neighbor N means we can reach S by sending to N. This gives every relay
+  // (and the destination) a return path without a second route discovery -
+  // here it lets A answer C's ping back through B instead of trying the
+  // simulated-out-of-range direct A->C link.
+  if (nwk.srcShort != network.info().nwkAddress && mac.srcShort < 0xFFF8 &&
+      nwk.srcShort < 0xFFF8) {
+    routes.upsert(nwk.srcShort, mac.srcShort, ZB_ROUTE_ACTIVE);
+  }
 
   // Forwarding: a unicast frame whose NWK destination is not us is relayed to
   // the route's next hop (radius-1, re-encrypted for the next hop). Copy the

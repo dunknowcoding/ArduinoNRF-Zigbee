@@ -239,6 +239,15 @@ CC2530 module:
   makes the other print `aged out 1 stale router neighbor(s)` after three
   missed periods. A stale parent instead reports parent-loss and re-enters
   joining via `rejoinParent()`.
+- **Multi-hop, three boards (A coordinator, B router, C end).** With A and C
+  set to ignore each other's frames (a bench stand-in for being out of radio
+  range), C scans, finds only router B's beacon, and joins **through** B from
+  B's own address pool (`addr=0x0031`). C then routes an encrypted ping to
+  the coordinator: B forwards `0x0031->0x0000`, A decrypts it (`mic=0`) and
+  replies, and the pong comes back `A->B->C` over the reverse route each node
+  learned from the traffic — a full `C->B->A->B->C` encrypted round trip on
+  hardware. Build the three roles with
+  `-DNIUS_ZIGBEE_THIS_NODE=0x0001` (A), `0x0002` (B), `0x0003` (C).
 - The joiner then discovers a route to the coordinator (Route Request
   broadcast -> unicast Route Reply, reverse route recorded on the way) and
   pings over it every 10 s: routed `route ping`/`route pong` round trips run
