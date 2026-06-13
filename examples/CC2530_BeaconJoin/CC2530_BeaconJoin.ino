@@ -138,6 +138,14 @@ bool mgmtLqiPending = false;
 uint32_t mgmtLqiRetryAt = 0;
 uint8_t mgmtLqiSeq = 0, mgmtLqiTries = 0;
 
+// Coordinator side: a received Mgmt_Lqi_req is answered from loop()
+// (sendPendingMgmtLqiRsp), not the RX callback, so the long ZDO response is
+// not transmitted while the CC2530 is still busy finishing the received
+// request frame - sending it from the callback dropped it on air.
+bool pendingLqiRsp = false;
+uint16_t lqiRspTo = 0;
+uint8_t lqiRspSeq = 0, lqiRspStart = 0;
+
 // Persistence: every node saves its network state + outgoing security frame
 // counter to flash so a power cycle restores the network identity (no
 // re-scan) and never rewinds the counter (which would let old secured frames
@@ -642,10 +650,21 @@ void serviceLinkStatusAndAging() {
 // Answer a Mgmt_Lqi_req with our neighbor table (a standard Zigbee
 // network-management query - this is what a coordinator/mapping tool uses to
 // walk the mesh).
-void replyMgmtLqi(const MacDataFrame& mac, const NwkDataFrame& nwk,
-                  const ApsDataFrame& aps) {
+// Record a Mgmt_Lqi_req for deferred answering from loop().
+void replyMgmtLqi(const NwkDataFrame& nwk, const ApsDataFrame& aps) {
   ZdoMgmtRequest req;
   if (!ZigbeeZdo::parseMgmtRequest(aps.payload, aps.payloadLen, req)) return;
+  pendingLqiRsp = true;
+  lqiRspTo = nwk.srcShort;
+  lqiRspSeq = req.sequence;
+  lqiRspStart = req.startIndex;
+}
+
+// Build and send the pending Mgmt_Lqi_rsp from the neighbor table. Called
+// from loop() when the radio is idle, not from the RX callback.
+void sendPendingMgmtLqiRsp() {
+  if (!pendingLqiRsp) return;
+  pendingLqiRsp = false;
 
   ZdoNeighborListEntry entries[4];
   uint8_t total = 0, listCount = 0;
@@ -653,7 +672,7 @@ void replyMgmtLqi(const MacDataFrame& mac, const NwkDataFrame& nwk,
     const ZigbeeNeighbor* nb = neighbors.slot(i);
     if (!nb || !nb->used) continue;
     ++total;
-    if (total <= req.startIndex || listCount >= 4) continue;
+    if (total <= lqiRspStart || listCount >= 4) continue;
     ZdoNeighborListEntry& e = entries[listCount++];
     e.extendedPanId = 0;  // not tracked per-neighbor here
     e.extendedAddress = nb->ieeeAddress;
@@ -668,20 +687,21 @@ void replyMgmtLqi(const MacDataFrame& mac, const NwkDataFrame& nwk,
 
   uint8_t payload[ZigbeeZdo::kMaxPayload];
   uint8_t n = ZigbeeZdo::buildMgmtLqiResponse(payload, sizeof(payload),
-                                              req.sequence, ZDO_STATUS_SUCCESS,
-                                              total, req.startIndex, entries,
+                                              lqiRspSeq, ZDO_STATUS_SUCCESS,
+                                              total, lqiRspStart, entries,
                                               listCount);
   if (n == 0) return;
-  uint16_t nh = routing.nextHopFor(nwk.srcShort);
-  if (nh == ZigbeeRouting::kNoNextHop) nh = mac.srcShort;
-  radio.sendZdoCommand(network.info().panId, nh, network.info().nwkAddress,
-                       nwk.srcShort, network.info().nwkAddress,
-                       ZDO_MGMT_LQI_RSP, payload, n, ZigbeeNwk::kDefaultRadius,
-                       /*macAck=*/true);   // per-hop MAC ack for the routed rsp
-  Serial.print("Mgmt_Lqi_req from 0x"); printHex16(nwk.srcShort);
-  Serial.print(" -> rsp with "); Serial.print(listCount);
-  Serial.print("/"); Serial.print(total);
-  Serial.print(" neighbor(s) via 0x"); printHex16(nh); Serial.println();
+  uint16_t nh = routing.nextHopFor(lqiRspTo);
+  if (nh == ZigbeeRouting::kNoNextHop) nh = lqiRspTo;
+  bool ok = radio.sendZdoCommand(network.info().panId, nh,
+                                 network.info().nwkAddress, lqiRspTo,
+                                 network.info().nwkAddress, ZDO_MGMT_LQI_RSP,
+                                 payload, n, ZigbeeNwk::kDefaultRadius,
+                                 /*macAck=*/true);
+  Serial.print("Mgmt_Lqi rsp -> 0x"); printHex16(lqiRspTo);
+  Serial.print(" ("); Serial.print(listCount); Serial.print("/");
+  Serial.print(total); Serial.print(" nb) via 0x"); printHex16(nh);
+  Serial.println(ok ? "" : " TX-FAIL");
 }
 
 // Print the neighbor table a Mgmt_Lqi_rsp brought back.
@@ -723,7 +743,7 @@ void onZdoFrame(const MacDataFrame& mac, const NwkDataFrame& nwk,
     Serial.print(" src=0x"); printHex16(nwk.srcShort);
     Serial.println();
   } else if (aps.clusterId == ZDO_MGMT_LQI_REQ && forUs) {
-    replyMgmtLqi(mac, nwk, aps);
+    replyMgmtLqi(nwk, aps);
   } else if (aps.clusterId == ZDO_MGMT_LQI_RSP && forUs) {
     printMgmtLqiRsp(nwk, aps);
   }
@@ -806,6 +826,10 @@ void setup() {
                               saved.extendedPanId, saved.channel,
                               saved.nwkAddress, saved.parentAddress,
                               saved.depth);
+    // Restore the default route to the coordinator via the parent - otherwise
+    // the route table is empty after a reboot and unicast frames fall back to
+    // sending direct (which the range-sim cuts), so nothing reaches the mesh.
+    routes.upsert(ZB_NWK_ADDR_COORDINATOR, saved.parentAddress, ZB_ROUTE_ACTIVE);
     radio.setSecurityFrameCounter(saved.outgoingFrameCounter);
     radio.setChannel(saved.channel);
     applyAddress(saved.panId, saved.nwkAddress);
@@ -827,6 +851,7 @@ void loop() {
   radio.poll();
   serviceLinkStatusAndAging();
   serviceRouteDiscovery();
+  sendPendingMgmtLqiRsp();   // answer a recorded Mgmt_Lqi_req while radio idle
   if (ROLE_ROUTER && network.isJoined()) becomeParent();
 
   // Persist network state + frame counter periodically so a reboot restores
