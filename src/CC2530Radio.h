@@ -19,6 +19,7 @@
 #include "ZigbeeReporting.h"
 #include "ZigbeeApsRetransmit.h"
 #include "ZigbeeApsDuplicateTable.h"
+#include "ZigbeePersistence.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -74,6 +75,8 @@ using nzb::ApsPending;
 using nzb::ApsRetransmitStats;
 using nzb::ZigbeeApsDuplicateTable;
 using nzb::ApsDupeEntry;
+using nzb::ZigbeePersistence;
+using nzb::ZigbeePersistentState;
 using nzb::ZdoAddressRequest;
 using nzb::ZdoAddressResponse;
 using nzb::ZdoActiveEndpointRequest;

@@ -158,6 +158,11 @@ class CC2530Radio {
   }
   ZigbeeSecurity* security() { return security_; }
 
+  /** Outgoing NWK security frame counter. Persist this across reboots and
+      restore it (with a margin) so old secured frames cannot replay. */
+  uint32_t securityFrameCounter() const { return securityCounter_; }
+  void setSecurityFrameCounter(uint32_t counter) { securityCounter_ = counter; }
+
   /** Broadcast a Beacon Request MAC command (active scan probe). */
   bool sendBeaconRequest();
 

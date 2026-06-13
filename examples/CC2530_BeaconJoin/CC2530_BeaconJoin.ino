@@ -32,6 +32,7 @@
 */
 
 #include <CC2530Radio.h>
+#include <EEPROM.h>   // ArduinoNRF core: wear-levelled flash key-value store
 #include <stdio.h>   // snprintf
 
 #ifndef NIUS_ZIGBEE_PAN_ID
@@ -136,6 +137,15 @@ uint32_t nextMgmtLqiCycleAt = 20000;  // start a fresh query 20 s after boot
 bool mgmtLqiPending = false;
 uint32_t mgmtLqiRetryAt = 0;
 uint8_t mgmtLqiSeq = 0, mgmtLqiTries = 0;
+
+// Persistence: every node saves its network state + outgoing security frame
+// counter to flash so a power cycle restores the network identity (no
+// re-scan) and never rewinds the counter (which would let old secured frames
+// replay). The counter is stored with a +1024 margin so a crash between
+// saves cannot reuse a value.
+uint32_t nextSaveAt = 0;
+static const uint32_t SAVE_PERIOD_MS = 20000;
+static const uint32_t COUNTER_MARGIN = 1024;
 
 const char* roleName() {
   return ROLE_COORD ? "A/coordinator" : ROLE_ROUTER ? "B/router" : "C/end";
@@ -719,10 +729,38 @@ void onZdoFrame(const MacDataFrame& mac, const NwkDataFrame& nwk,
   }
 }
 
+void saveState() {
+  ZigbeePersistentState s;
+  s.panId = network.info().panId;
+  s.extendedPanId = network.info().extendedPanId;
+  s.channel = network.info().channel;
+  s.nwkAddress = network.info().nwkAddress;
+  s.parentAddress = network.info().parentAddress;
+  s.depth = network.info().depth;
+  s.deviceType = network.info().deviceType;
+  s.ieeeAddress = THIS_IEEE;
+  s.outgoingFrameCounter = radio.securityFrameCounter() + COUNTER_MARGIN;
+  s.keySequence = security.keySequence();
+
+  uint8_t blob[ZigbeePersistence::kBlobSize];
+  if (ZigbeePersistence::serialize(s, blob, sizeof(blob)) == 0) return;
+  for (uint8_t i = 0; i < sizeof(blob); ++i) EEPROM.write(i, blob[i]);
+  EEPROM.commit();
+}
+
+// Read the saved blob; returns true and fills `s` when valid and ours.
+bool loadState(ZigbeePersistentState& s) {
+  uint8_t blob[ZigbeePersistence::kBlobSize];
+  for (uint8_t i = 0; i < sizeof(blob); ++i) blob[i] = EEPROM.read(i);
+  if (!ZigbeePersistence::deserialize(blob, sizeof(blob), s)) return false;
+  return s.ieeeAddress == THIS_IEEE;
+}
+
 void setup() {
   Serial.begin(115200);
   uint32_t t0 = millis();
   while (!Serial && millis() - t0 < 3000) {}
+  EEPROM.begin(64);
 
   network.attachNeighborTable(neighbors);
   routing.attachRouteTable(routes);
@@ -746,16 +784,41 @@ void setup() {
   Serial.print("Node "); Serial.print(roleName());
   Serial.print(" ieee=0x"); printHex64(THIS_IEEE); Serial.println();
 
+  ZigbeePersistentState saved;
+  bool haveSaved = loadState(saved);
+
   if (IS_COORDINATOR) {
     network.beginCoordinator(PAN_ID, EXT_PAN_ID, COORD_CHANNEL);
     network.configureAddressPool(COORD_POOL_FIRST, COORD_POOL_LAST);
     network.permitJoining(0xFF);
     applyAddress(PAN_ID, ZB_NWK_ADDR_COORDINATOR);
-    Serial.print("Coordinator up. PAN=0x"); printHex16(PAN_ID);
-    Serial.print(" ch="); Serial.println(COORD_CHANNEL);
+    if (haveSaved) {  // identity is fixed; only the counter must not rewind
+      radio.setSecurityFrameCounter(saved.outgoingFrameCounter);
+      Serial.print("Coordinator up (counter restored to ");
+      Serial.print(saved.outgoingFrameCounter); Serial.println(")");
+    } else {
+      Serial.print("Coordinator up. PAN=0x"); printHex16(PAN_ID);
+      Serial.print(" ch="); Serial.println(COORD_CHANNEL);
+    }
+  } else if (haveSaved) {
+    // Restore the joined identity - no scan / association needed.
+    network.beginJoinedDevice(saved.deviceType, saved.panId,
+                              saved.extendedPanId, saved.channel,
+                              saved.nwkAddress, saved.parentAddress,
+                              saved.depth);
+    radio.setSecurityFrameCounter(saved.outgoingFrameCounter);
+    radio.setChannel(saved.channel);
+    applyAddress(saved.panId, saved.nwkAddress);
+    radio.setPromiscuous(false);
+    if (ROLE_ROUTER) becomeParent();
+    announced = true;  // already announced in a previous life
+    Serial.print("RESTORED from flash: addr=0x"); printHex16(saved.nwkAddress);
+    Serial.print(" parent=0x"); printHex16(saved.parentAddress);
+    Serial.print(" counter="); Serial.print(saved.outgoingFrameCounter);
+    Serial.println(" - skipping scan");
   } else {
     radio.onBeaconReceive(onBeacon);
-    Serial.println("Joiner up. No network parameters - will scan.");
+    Serial.println("Joiner up. No saved state - will scan.");
     runActiveScan();
   }
 }
@@ -765,6 +828,14 @@ void loop() {
   serviceLinkStatusAndAging();
   serviceRouteDiscovery();
   if (ROLE_ROUTER && network.isJoined()) becomeParent();
+
+  // Persist network state + frame counter periodically so a reboot restores
+  // the identity and never rewinds the counter.
+  if ((network.isJoined() || IS_COORDINATOR) &&
+      (int32_t)(millis() - nextSaveAt) >= 0) {
+    nextSaveAt = millis() + SAVE_PERIOD_MS;
+    saveState();
+  }
 
   if ((int32_t)(millis() - nextStatus) >= 0) {
     nextStatus = millis() + 10000;

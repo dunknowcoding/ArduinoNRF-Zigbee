@@ -241,8 +241,19 @@ while preserving the existing raw send / receive / sniffer APIs.
    TX return). Fix path: APS-acked ZDO (end-to-end retransmit like the data
    plane), or check the rsp TX result and retry, or shorten/paginate the
    response - a dedicated follow-up.
-5. **Persistence** - network identity, addresses, frame counters, bindings,
-   and reporting config in nRF flash (NrfNvmc) so nodes survive reboots.
+5. **Persistence** - DONE for network identity + frame counter.
+   `ZigbeePersistence` serializes the network state (PAN, ext PAN, channel,
+   short/parent address, depth, device type, IEEE, outgoing security frame
+   counter, key sequence) to a fixed little-endian blob with a CRC-16, and
+   restores it; the sketch stores the blob in the core's wear-levelled
+   EEPROM. `CC2530Radio::securityFrameCounter()` / `setSecurityFrameCounter()`
+   expose the counter. `CC2530_BeaconJoin` saves every 20 s and, on boot,
+   restores the joined identity (no re-scan / re-association) and resumes the
+   frame counter with a +1024 margin so it never rewinds. HW-verified: after
+   a reboot the end device prints `RESTORED from flash: addr=0x0031
+   parent=0x0001 counter=1072 - skipping scan` and immediately resumes
+   encrypted traffic. Remaining: persisting bindings + reporting config (once
+   those tables exist).
 6. **Binding table + group addressing** and APS fragmentation. (APS
    end-to-end acknowledgements/retries are DONE - see below; binding,
    groups, and fragmentation remain.)
