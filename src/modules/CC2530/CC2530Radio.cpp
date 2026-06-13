@@ -32,6 +32,7 @@ CC2530Radio::CC2530Radio(HardwareSerial& serial)
       macCommandCb_(nullptr), beaconCb_(nullptr), security_(nullptr),
       securityIeee_(0), securityCounter_(0), nwkCb_(nullptr),
       nwkCommandCb_(nullptr), apsCb_(nullptr), zdoCb_(nullptr), zclCb_(nullptr),
+      apsAckCb_(nullptr),
       version_(0), channel_(11),
       macSequence_(0), nwkSequence_(0), apsCounter_(0), zclSequence_(0),
       lastTxAttempts_(0),
@@ -113,11 +114,22 @@ void CC2530Radio::feed(uint8_t b) {
                 }
               }
 
-              if (!nwkDrop && (nwkCb_ || apsCb_ || zdoCb_ || zclCb_)) {
+              if (!nwkDrop && (nwkCb_ || apsCb_ || zdoCb_ || zclCb_ || apsAckCb_)) {
                 NwkDataFrame nwk;
                 if (ZigbeeNwk::parseDataFrame(npdu, npduLen, nwk)) {
                   if (nwkCb_) {
                     nwkCb_(frame, nwk, rssi, lqi);
+                  }
+                  // APS ACK frames have their own frame type; branch before
+                  // the data-frame parse (which rejects non-data types).
+                  if (apsAckCb_ &&
+                      ZigbeeAps::frameType(nwk.payload, nwk.payloadLen) ==
+                          APS_FRAME_ACK) {
+                    ApsAckFrame ack;
+                    if (ZigbeeAps::parseAckFrame(nwk.payload, nwk.payloadLen,
+                                                 ack)) {
+                      apsAckCb_(frame, nwk, ack, rssi, lqi);
+                    }
                   }
                   if (apsCb_ || zdoCb_ || zclCb_) {
                     ApsDataFrame aps;

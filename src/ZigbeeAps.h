@@ -40,6 +40,18 @@ struct ApsDataFrame {
   uint8_t payloadLen;
 };
 
+/** A parsed APS acknowledgement frame (frame type = 0b10). It echoes the
+    addressing of the data frame it confirms and carries the same APS
+    counter, which is what the sender matches against its pending table. */
+struct ApsAckFrame {
+  bool valid;
+  uint8_t dstEndpoint;
+  uint16_t clusterId;
+  uint16_t profileId;
+  uint8_t srcEndpoint;
+  uint8_t counter;
+};
+
 class ZigbeeAps {
  public:
   static const uint8_t kBaseHeaderLen = 8;
@@ -57,6 +69,22 @@ class ZigbeeAps {
 
   static bool parseDataFrame(const uint8_t* apdu, uint8_t len,
                              ApsDataFrame& frame);
+
+  /** APS frame type of an APDU (APS_FRAME_DATA / _COMMAND / _ACK), or 0xFF
+      if too short to tell. Lets a receiver branch before full parsing. */
+  static uint8_t frameType(const uint8_t* apdu, uint8_t len);
+
+  /** Build an APS acknowledgement frame confirming a received data frame.
+      The endpoints are passed already swapped for the return direction
+      (ackDstEndpoint = received srcEndpoint, ackSrcEndpoint = received
+      dstEndpoint); counter is the received data frame's APS counter. */
+  static uint8_t buildAckFrame(uint8_t* out, uint8_t outMax,
+                               uint8_t ackDstEndpoint, uint16_t clusterId,
+                               uint16_t profileId, uint8_t ackSrcEndpoint,
+                               uint8_t counter);
+
+  static bool parseAckFrame(const uint8_t* apdu, uint8_t len,
+                            ApsAckFrame& frame);
 
  private:
   static uint16_t readLe16(const uint8_t* p) {

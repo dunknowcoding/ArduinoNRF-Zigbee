@@ -248,6 +248,13 @@ CC2530 module:
   learned from the traffic — a full `C->B->A->B->C` encrypted round trip on
   hardware. Build the three roles with
   `-DNIUS_ZIGBEE_THIS_NODE=0x0001` (A), `0x0002` (B), `0x0003` (C).
+- **APS end-to-end acknowledged delivery.** The end device's data plane sends
+  an acked APS frame to the coordinator over the routed mesh; the coordinator
+  replies with an APS ACK (same APS counter) over the reverse route, and the
+  sender retransmits until the ACK arrives or the retry budget runs out. On
+  the 3-board line this lifts confirmed end-to-end delivery from ~11% (a raw
+  routed ping with no recovery) to ~55%, and the sender's
+  `aps[q=.. ok=.. rtx=.. drop=..]` status reports exactly which frames made it.
 - The joiner then discovers a route to the coordinator (Route Request
   broadcast -> unicast Route Reply, reverse route recorded on the way) and
   pings over it every 10 s: routed `route ping`/`route pong` round trips run

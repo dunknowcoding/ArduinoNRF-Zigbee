@@ -62,6 +62,10 @@ typedef void (*CC2530ZclCallback)(const MacDataFrame& mac,
                                   const ApsDataFrame& aps,
                                   const ZclFrame& zcl, int8_t rssi,
                                   uint8_t lqi);
+typedef void (*CC2530ApsAckCallback)(const MacDataFrame& mac,
+                                     const NwkDataFrame& nwk,
+                                     const ApsAckFrame& ack, int8_t rssi,
+                                     uint8_t lqi);
 
 struct CC2530MacInfo {
   uint8_t flags;
@@ -233,6 +237,10 @@ class CC2530Radio {
   /** Register a parsed ZCL command callback (delivered from poll()). */
   void onZclReceive(CC2530ZclCallback cb) { zclCb_ = cb; }
 
+  /** Register an APS acknowledgement callback (frame type 0b10), used by the
+      sender side of end-to-end acked delivery to clear its pending table. */
+  void onApsAckReceive(CC2530ApsAckCallback cb) { apsAckCb_ = cb; }
+
   /** Pump the UART and deliver any received frames. Call often from loop(). */
   void poll();
 
@@ -247,6 +255,7 @@ class CC2530Radio {
   CC2530ApsCallback apsCb_;
   CC2530ZdoCallback zdoCb_;
   CC2530ZclCallback zclCb_;
+  CC2530ApsAckCallback apsAckCb_;
   uint16_t version_;
   uint8_t channel_;
   uint8_t macSequence_;

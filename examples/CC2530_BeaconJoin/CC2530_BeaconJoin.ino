@@ -32,6 +32,7 @@
 */
 
 #include <CC2530Radio.h>
+#include <stdio.h>   // snprintf
 
 #ifndef NIUS_ZIGBEE_PAN_ID
 #define NIUS_ZIGBEE_PAN_ID 0x1A62
@@ -104,11 +105,24 @@ ZigbeeSecurity security;
 ZigbeeParentCandidate chosenParent;
 uint8_t scanChannel = 0;
 uint8_t pendingRreqId = 0;
-uint32_t nextRoutePingAt = 0, routePings = 0, routePongs = 0;
 uint32_t nextDiscoveryAt = 0, nextActionAt = 0, nextStatus = 0;
 uint32_t forwarded = 0;
 bool announced = false, parentReady = false;
 uint8_t zdoSequence = 0;
+
+// APS end-to-end acknowledged delivery (the data plane). The end device
+// sends an acked APS data frame to the coordinator every few seconds; the
+// coordinator answers with an APS ACK carrying the same APS counter, routed
+// back over the mesh. Lost round trips are retransmitted until the ACK
+// arrives or the retry budget runs out - so the delivered/queued ratio is
+// the multi-hop reliability the raw ping lacked.
+ZigbeeApsRetransmit apsRetx;
+ApsPending apsPendingStorage[4];
+static const uint8_t APS_ENDPOINT = 1;
+static const uint16_t APS_CLUSTER = 0x1042;   // a private test cluster
+static const uint16_t APS_PROFILE = 0x0104;   // Home Automation
+uint8_t apsCounter = 0;
+uint32_t apsSeq = 0, nextApsSendAt = 0;
 
 const char* roleName() {
   return ROLE_COORD ? "A/coordinator" : ROLE_ROUTER ? "B/router" : "C/end";
@@ -422,25 +436,62 @@ void onNwkData(const MacDataFrame& mac, const NwkDataFrame& nwk, int8_t rssi,
     return;
   }
 
-  if (nwk.payloadLen == 10 && memcmp(nwk.payload, "route ping", 10) == 0) {
-    Serial.print("ROUTED ping from 0x"); printHex16(nwk.srcShort);
-    uint16_t nextHop = routing.nextHopFor(nwk.srcShort);
-    if (nextHop == ZigbeeRouting::kNoNextHop) nextHop = nwk.srcShort;
-    bool ok = radio.sendNwkData(network.info().panId, nextHop,
-                                network.info().nwkAddress, nwk.srcShort,
-                                network.info().nwkAddress,
-                                (const uint8_t*)"route pong", 10,
-                                ZigbeeNwk::kDefaultRadius, true);
-    Serial.print(" -> pong via 0x"); printHex16(nextHop);
-    Serial.println(ok ? "" : " FAILED");
-    return;
-  }
+  // Frames addressed to us are handled by the APS callbacks (onApsData /
+  // onApsAck); onNwkData's job here is forwarding + reverse-route learning.
+}
 
-  if (nwk.payloadLen == 10 && memcmp(nwk.payload, "route pong", 10) == 0) {
-    ++routePongs;
-    Serial.print("ROUTED pong from 0x"); printHex16(nwk.srcShort);
-    Serial.print(" - round trip "); Serial.print(routePongs);
-    Serial.print("/"); Serial.println(routePings);
+// Route an APS frame toward `dst` over the mesh (next hop from the route
+// table, falling back to the address itself for a direct neighbor).
+bool sendApsRouted(uint16_t dst, const uint8_t* apdu, uint8_t apduLen) {
+  uint16_t nextHop = routing.nextHopFor(dst);
+  if (nextHop == ZigbeeRouting::kNoNextHop) nextHop = dst;
+  return radio.sendNwkData(network.info().panId, nextHop,
+                           network.info().nwkAddress, dst,
+                           network.info().nwkAddress, apdu, apduLen,
+                           ZigbeeNwk::kDefaultRadius, true);
+}
+
+// Coordinator/parent side: a received acked APS data frame is answered with
+// an APS ACK routed back to the sender (the reverse route was just learned
+// in onNwkData).
+void onApsData(const MacDataFrame& mac, const NwkDataFrame& nwk,
+               const ApsDataFrame& aps, int8_t rssi, uint8_t lqi) {
+  (void)rssi; (void)lqi;
+  if (aps.clusterId != APS_CLUSTER) return;  // leave ZDO etc. alone
+
+  Serial.print("APS data from 0x"); printHex16(nwk.srcShort);
+  Serial.print(" cnt="); Serial.print(aps.counter);
+  Serial.print(" \"");
+  for (uint8_t i = 0; i < aps.payloadLen; ++i) Serial.print((char)aps.payload[i]);
+  Serial.print("\"");
+
+  if (aps.ackRequest) {
+    uint8_t ack[ZigbeeAps::kBaseHeaderLen];
+    uint8_t n = ZigbeeAps::buildAckFrame(ack, sizeof(ack), aps.srcEndpoint,
+                                         aps.clusterId, aps.profileId,
+                                         aps.dstEndpoint, aps.counter);
+    uint16_t nh = routing.nextHopFor(nwk.srcShort);
+    if (nh == ZigbeeRouting::kNoNextHop) nh = mac.srcShort;
+    bool ok = radio.sendNwkData(network.info().panId, nh,
+                                network.info().nwkAddress, nwk.srcShort,
+                                network.info().nwkAddress, ack, n,
+                                ZigbeeNwk::kDefaultRadius, true);
+    Serial.print(ok ? " -> ACK via 0x" : " -> ACK FAILED via 0x");
+    printHex16(nh);
+  }
+  Serial.println();
+}
+
+// Sender side: an APS ACK clears the matching pending entry.
+void onApsAck(const MacDataFrame& mac, const NwkDataFrame& nwk,
+              const ApsAckFrame& ack, int8_t rssi, uint8_t lqi) {
+  (void)mac; (void)nwk; (void)rssi; (void)lqi;
+  if (ack.clusterId != APS_CLUSTER) return;
+  if (apsRetx.onAck(ack.counter, ack.dstEndpoint)) {
+    Serial.print("APS ACK ok cnt="); Serial.print(ack.counter);
+    Serial.print(" (delivered "); Serial.print(apsRetx.stats().delivered);
+    Serial.print("/"); Serial.print(apsRetx.stats().queued);
+    Serial.println(")");
   }
 }
 
@@ -470,19 +521,33 @@ void serviceRouteDiscovery() {
     return;
   }
 
-  if ((int32_t)(millis() - nextRoutePingAt) >= 0) {
-    nextRoutePingAt = millis() + 10000;
-    ++routePings;
-    uint16_t nextHop = routing.nextHopFor(target);
-    bool ok = radio.sendNwkData(network.info().panId, nextHop,
-                                network.info().nwkAddress, target,
-                                network.info().nwkAddress,
-                                (const uint8_t*)"route ping", 10,
-                                ZigbeeNwk::kDefaultRadius, true);
-    Serial.print("route ping "); Serial.print(routePings);
+  // Route is ACTIVE: send a new acked APS frame every 10 s and service any
+  // retransmits that have come due in between.
+  if ((int32_t)(millis() - nextApsSendAt) >= 0) {
+    nextApsSendAt = millis() + 10000;
+    char msg[16];
+    int len = snprintf(msg, sizeof(msg), "aps %lu", (unsigned long)++apsSeq);
+    uint8_t apdu[ZigbeeAps::kMaxFrame];
+    uint8_t n = ZigbeeAps::buildDataFrame(apdu, sizeof(apdu), APS_ENDPOINT,
+                                          APS_CLUSTER, APS_PROFILE,
+                                          APS_ENDPOINT, apsCounter,
+                                          (const uint8_t*)msg, (uint8_t)len,
+                                          /*ackRequest=*/true);
+    bool ok = sendApsRouted(target, apdu, n);
+    apsRetx.add(target, apsCounter, APS_ENDPOINT, apdu, n, /*maxRetries=*/3,
+                /*intervalMs=*/1500, millis());
+    Serial.print("APS send seq="); Serial.print(apsSeq);
+    Serial.print(" cnt="); Serial.print(apsCounter);
     Serial.print(" -> 0x"); printHex16(target);
-    Serial.print(" via 0x"); printHex16(nextHop);
     Serial.println(ok ? "" : " (tx FAILED)");
+    ++apsCounter;
+  }
+
+  ApsPending* due = apsRetx.due(millis());
+  if (due) {
+    sendApsRouted(due->dstShort, due->apdu, due->apduLen);
+    apsRetx.markAttempted(due, millis());
+    Serial.print("APS retransmit cnt="); Serial.println(due->apsCounter);
   }
 }
 
@@ -544,7 +609,10 @@ void setup() {
   radio.onNwkCommandReceive(onNwkCommand);
   radio.onNwkReceive(onNwkData);
   radio.onZdoReceive(onZdoFrame);
+  radio.onApsReceive(onApsData);
+  radio.onApsAckReceive(onApsAck);
   radio.attachSecurity(security, THIS_IEEE);
+  apsRetx.begin(apsPendingStorage, 4);
 
   Serial.print("Node "); Serial.print(roleName());
   Serial.print(" ieee=0x"); printHex64(THIS_IEEE); Serial.println();
@@ -580,7 +648,16 @@ void loop() {
     Serial.print(" rx="); Serial.print(security.stats().opened);
     Serial.print(" mic="); Serial.print(security.stats().micFailures);
     Serial.print(" rpl="); Serial.print(security.stats().replays);
-    Serial.println("]");
+    Serial.print("]");
+    if (ROLE_END) {
+      const ApsRetransmitStats& a = apsRetx.stats();
+      Serial.print(" aps[q="); Serial.print(a.queued);
+      Serial.print(" ok="); Serial.print(a.delivered);
+      Serial.print(" rtx="); Serial.print(a.retransmits);
+      Serial.print(" drop="); Serial.print(a.dropped);
+      Serial.print("]");
+    }
+    Serial.println();
   }
 
   if (IS_COORDINATOR) return;

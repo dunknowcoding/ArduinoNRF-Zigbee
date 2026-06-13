@@ -28,6 +28,46 @@ uint8_t ZigbeeAps::buildDataFrame(uint8_t* out, uint8_t outMax,
   return (uint8_t)(kBaseHeaderLen + payloadLen);
 }
 
+uint8_t ZigbeeAps::frameType(const uint8_t* apdu, uint8_t len) {
+  if (!apdu || len < 1) return 0xFF;
+  return (uint8_t)(apdu[0] & 0x03);
+}
+
+uint8_t ZigbeeAps::buildAckFrame(uint8_t* out, uint8_t outMax,
+                                 uint8_t ackDstEndpoint, uint16_t clusterId,
+                                 uint16_t profileId, uint8_t ackSrcEndpoint,
+                                 uint8_t counter) {
+  if (!out || outMax < kBaseHeaderLen) return 0;
+
+  uint8_t fcf = APS_FRAME_ACK;
+  fcf |= (uint8_t)(APS_DELIVERY_UNICAST << 2);
+
+  out[0] = fcf;
+  out[1] = ackDstEndpoint;
+  writeLe16(&out[2], clusterId);
+  writeLe16(&out[4], profileId);
+  out[6] = ackSrcEndpoint;
+  out[7] = counter;
+  return kBaseHeaderLen;
+}
+
+bool ZigbeeAps::parseAckFrame(const uint8_t* apdu, uint8_t len,
+                              ApsAckFrame& frame) {
+  frame = ApsAckFrame();
+  if (!apdu || len < kBaseHeaderLen) return false;
+
+  uint8_t fcf = apdu[0];
+  if ((uint8_t)(fcf & 0x03) != APS_FRAME_ACK) return false;
+
+  frame.valid = true;
+  frame.dstEndpoint = apdu[1];
+  frame.clusterId = readLe16(&apdu[2]);
+  frame.profileId = readLe16(&apdu[4]);
+  frame.srcEndpoint = apdu[6];
+  frame.counter = apdu[7];
+  return true;
+}
+
 bool ZigbeeAps::parseDataFrame(const uint8_t* apdu, uint8_t len,
                                ApsDataFrame& frame) {
   frame = ApsDataFrame();

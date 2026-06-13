@@ -153,6 +153,19 @@ run TI Z-Stack or Zigbee PRO internally.
   the promiscuous flag so a coordinator that never calls `setPromiscuous`
   still decrypts. (Fixes a one-way-link bug where the coordinator silently
   skipped all decryption.)
+- APS end-to-end acknowledged delivery: `ZigbeeAps::buildAckFrame()` /
+  `parseAckFrame()` / `frameType()` (APS frame type 0b10), a
+  `ZigbeeApsRetransmit` pending table (copy the acked APDU, match incoming
+  ACKs by APS counter + endpoint, surface due retransmits, count
+  delivered/retransmits/dropped), and `CC2530Radio::onApsAckReceive()` to
+  dispatch ACK frames. The `CC2530_BeaconJoin` data plane now sends an acked
+  APS frame to the coordinator over the routed mesh; the coordinator answers
+  with an APS ACK over the reverse route. HW-verified on the 3-board A-B-C
+  line: end-to-end delivery rose from ~11% (raw routed ping, no recovery) to
+  ~55% confirmed delivery with retransmit, and the sender knows exactly which
+  frames were delivered vs dropped. (Receiver-side APS duplicate rejection -
+  a retransmit reaching the destination is currently processed twice - is the
+  next refinement.)
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`
@@ -200,8 +213,9 @@ while preserving the existing raw send / receive / sniffer APIs.
    to standard Zigbee network-mapping tools.
 5. **Persistence** - network identity, addresses, frame counters, bindings,
    and reporting config in nRF flash (NrfNvmc) so nodes survive reboots.
-6. **Binding table + group addressing**, APS acknowledgements/retries, and
-   APS fragmentation.
+6. **Binding table + group addressing** and APS fragmentation. (APS
+   end-to-end acknowledgements/retries are DONE - see below; binding,
+   groups, and fragmentation remain.)
 7. **PAN ID conflict resolution and network update** (updateId / channel
    change propagation).
 8. **Multi-hop relay** - DONE (code): routers answer beacon requests and

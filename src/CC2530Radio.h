@@ -17,6 +17,7 @@
 #include "ZigbeeNetwork.h"
 #include "ZigbeeRouting.h"
 #include "ZigbeeReporting.h"
+#include "ZigbeeApsRetransmit.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -28,6 +29,7 @@ using nzb::CC2530NwkCommandCallback;
 using nzb::CC2530ApsCallback;
 using nzb::CC2530ZdoCallback;
 using nzb::CC2530ZclCallback;
+using nzb::CC2530ApsAckCallback;
 using nzb::MacDataFrame;
 using nzb::MacCommandFrame;
 using nzb::MacAssociationRequest;
@@ -64,6 +66,11 @@ using nzb::ZigbeeSecurityStats;
 using nzb::ZB_ROUTE_ACTIVE;
 using nzb::ZB_ROUTE_DISCOVERY_UNDERWAY;
 using nzb::ApsDataFrame;
+using nzb::ApsAckFrame;
+using nzb::APS_FRAME_ACK;
+using nzb::ZigbeeApsRetransmit;
+using nzb::ApsPending;
+using nzb::ApsRetransmitStats;
 using nzb::ZdoAddressRequest;
 using nzb::ZdoAddressResponse;
 using nzb::ZdoActiveEndpointRequest;
