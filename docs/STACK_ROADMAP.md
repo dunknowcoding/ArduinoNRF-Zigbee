@@ -163,9 +163,14 @@ run TI Z-Stack or Zigbee PRO internally.
   with an APS ACK over the reverse route. HW-verified on the 3-board A-B-C
   line: end-to-end delivery rose from ~11% (raw routed ping, no recovery) to
   ~55% confirmed delivery with retransmit, and the sender knows exactly which
-  frames were delivered vs dropped. (Receiver-side APS duplicate rejection -
-  a retransmit reaching the destination is currently processed twice - is the
-  next refinement.)
+  frames were delivered vs dropped.
+- APS receive-side duplicate rejection (`ZigbeeApsDuplicateTable`): records
+  the last APS counter per (source short addr, source endpoint) so a
+  retransmit that reaches the destination is **re-acked but not reprocessed**
+  by the application (the sender is still waiting for the ACK, but the frame
+  must only be handled once). HW-verified: the coordinator logs
+  `APS dup ... re-acked, not reprocessed` instead of handling the same APS
+  counter twice.
 - `CC2530Radio::sendZdoCommand()`
 - `CC2530Radio::onZdoReceive()`
 - `CC2530Radio::sendZclCommand()`

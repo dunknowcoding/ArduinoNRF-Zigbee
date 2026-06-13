@@ -118,6 +118,9 @@ uint8_t zdoSequence = 0;
 // the multi-hop reliability the raw ping lacked.
 ZigbeeApsRetransmit apsRetx;
 ApsPending apsPendingStorage[4];
+ZigbeeApsDuplicateTable apsDupe;   // receiver side: reject reprocessed retransmits
+ApsDupeEntry apsDupeStorage[6];
+uint32_t apsDuplicates = 0;
 static const uint8_t APS_ENDPOINT = 1;
 static const uint16_t APS_CLUSTER = 0x1042;   // a private test cluster
 static const uint16_t APS_PROFILE = 0x0104;   // Home Automation
@@ -459,11 +462,10 @@ void onApsData(const MacDataFrame& mac, const NwkDataFrame& nwk,
   (void)rssi; (void)lqi;
   if (aps.clusterId != APS_CLUSTER) return;  // leave ZDO etc. alone
 
-  Serial.print("APS data from 0x"); printHex16(nwk.srcShort);
-  Serial.print(" cnt="); Serial.print(aps.counter);
-  Serial.print(" \"");
-  for (uint8_t i = 0; i < aps.payloadLen; ++i) Serial.print((char)aps.payload[i]);
-  Serial.print("\"");
+  // A retransmit that reached us must STILL be acked (the sender lost the
+  // previous ACK), but the duplicate must not be processed by the app twice.
+  bool isNew = apsDupe.checkAndRecord(nwk.srcShort, aps.srcEndpoint,
+                                      aps.counter, millis());
 
   if (aps.ackRequest) {
     uint8_t ack[ZigbeeAps::kBaseHeaderLen];
@@ -472,14 +474,24 @@ void onApsData(const MacDataFrame& mac, const NwkDataFrame& nwk,
                                          aps.dstEndpoint, aps.counter);
     uint16_t nh = routing.nextHopFor(nwk.srcShort);
     if (nh == ZigbeeRouting::kNoNextHop) nh = mac.srcShort;
-    bool ok = radio.sendNwkData(network.info().panId, nh,
-                                network.info().nwkAddress, nwk.srcShort,
-                                network.info().nwkAddress, ack, n,
-                                ZigbeeNwk::kDefaultRadius, true);
-    Serial.print(ok ? " -> ACK via 0x" : " -> ACK FAILED via 0x");
-    printHex16(nh);
+    radio.sendNwkData(network.info().panId, nh, network.info().nwkAddress,
+                      nwk.srcShort, network.info().nwkAddress, ack, n,
+                      ZigbeeNwk::kDefaultRadius, true);
   }
-  Serial.println();
+
+  if (!isNew) {
+    ++apsDuplicates;
+    Serial.print("APS dup cnt="); Serial.print(aps.counter);
+    Serial.print(" from 0x"); printHex16(nwk.srcShort);
+    Serial.println(" (re-acked, not reprocessed)");
+    return;
+  }
+
+  Serial.print("APS data from 0x"); printHex16(nwk.srcShort);
+  Serial.print(" cnt="); Serial.print(aps.counter);
+  Serial.print(" \"");
+  for (uint8_t i = 0; i < aps.payloadLen; ++i) Serial.print((char)aps.payload[i]);
+  Serial.println("\" -> ACK");
 }
 
 // Sender side: an APS ACK clears the matching pending entry.
@@ -613,6 +625,7 @@ void setup() {
   radio.onApsAckReceive(onApsAck);
   radio.attachSecurity(security, THIS_IEEE);
   apsRetx.begin(apsPendingStorage, 4);
+  apsDupe.begin(apsDupeStorage, 6);
 
   Serial.print("Node "); Serial.print(roleName());
   Serial.print(" ieee=0x"); printHex64(THIS_IEEE); Serial.println();
@@ -649,6 +662,9 @@ void loop() {
     Serial.print(" mic="); Serial.print(security.stats().micFailures);
     Serial.print(" rpl="); Serial.print(security.stats().replays);
     Serial.print("]");
+    if (IS_PARENT_CAPABLE) {
+      Serial.print(" dup="); Serial.print(apsDuplicates);
+    }
     if (ROLE_END) {
       const ApsRetransmitStats& a = apsRetx.stats();
       Serial.print(" aps[q="); Serial.print(a.queued);
