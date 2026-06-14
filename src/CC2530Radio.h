@@ -26,6 +26,7 @@
 #include "ZigbeeApsSecurity.h"
 #include "ZigbeeBroadcastTable.h"
 #include "ZigbeeIndirectQueue.h"
+#include "ZigbeeEndDeviceTimeout.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -101,6 +102,17 @@ using nzb::ZigbeeBroadcastTable;
 using nzb::BroadcastEntry;
 using nzb::ZigbeeIndirectQueue;
 using nzb::IndirectEntry;
+using nzb::ZigbeeEndDeviceTimeout;
+using nzb::NwkEdTimeoutRequest;
+using nzb::NwkEdTimeoutResponse;
+using nzb::ED_TIMEOUT_SUCCESS;
+using nzb::ED_TIMEOUT_INCORRECT_VALUE;
+using nzb::ED_PARENT_MAC_DATA_POLL;
+using nzb::ED_PARENT_ED_TIMEOUT;
+using nzb::NWK_CMD_ED_TIMEOUT_REQUEST;
+using nzb::NWK_CMD_ED_TIMEOUT_RESPONSE;
+using nzb::NWK_CMD_NETWORK_REPORT;
+using nzb::NWK_CMD_NETWORK_UPDATE;
 using nzb::ZigbeeApsKey;
 using nzb::ZigbeeApsSecurity;
 using nzb::ApsSecurityKeyId;

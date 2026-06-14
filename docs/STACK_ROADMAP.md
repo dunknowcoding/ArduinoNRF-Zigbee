@@ -256,6 +256,12 @@ while preserving the existing raw send / receive / sniffer APIs.
    capacity reuse, expiry). What remains: set the frame-pending bit in the ack
    to the Data Request on air, which needs CC2530 firmware support (or
    relaxed-timing host emulation); `hasPending()` is the host-side input.
+   The keep-alive side is DONE too: `ZigbeeEndDeviceTimeout` builds/parses the
+   NWK End Device Timeout Request (0x0B) / Response (0x0C) and maps the timeout
+   enumeration to seconds (index 0 = 10 s, then 2^n minutes), so a sleepy child
+   negotiates how long it may stay silent and the parent advertises which
+   keep-alive methods it supports (MAC data poll / ED timeout).
+   `CC2530_EndDeviceTimeout` self-tests it 18/18 on hardware.
 4. **ZDO Mgmt_Lqi_rsp / Mgmt_Rtg_rsp** - DONE (frame tooling +
    Mgmt_Lqi HW-verified). `ZigbeeZdo` builds/parses Mgmt_Lqi_req /
    Mgmt_Lqi_rsp / Mgmt_Rtg_req / Mgmt_Rtg_rsp with neighbor-list (22 B) and
