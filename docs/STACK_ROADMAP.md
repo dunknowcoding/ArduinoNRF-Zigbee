@@ -365,7 +365,13 @@ while preserving the existing raw send / receive / sniffer APIs.
    side: `install` from a received Route Record (travel order device ->
    concentrator), `downstreamRoute` returns the reversed path (concentrator ->
    device) for the NWK source-route subframe, plus refresh/expire/recycle.
-   `CC2530_SourceRouting` self-tests it 22/22 on hardware. What remains: install
-   the cheap many-to-one route on hearing the MTORR, originate Route Records,
-   and build + forward along the NWK source-route subframe (a NWK header
-   extension the current data-frame builder does not emit yet).
+   The NWK source-route subframe is now emitted/parsed too:
+   `ZigbeeNwk::buildDataFrameSourceRouted` sets the source-route FCF bit and
+   writes the subframe (relay count, relay index, ordered relay list) before the
+   payload, and `parseDataFrame` parses it (exposing `srRelayCount` /
+   `srRelayIndex` / `getDataFrameRelay`) instead of rejecting it - plain data
+   frames are unchanged. `CC2530_SourceRouting` self-tests it 30/30 on hardware.
+   What remains (OTA wiring): install the cheap many-to-one route on hearing the
+   MTORR, originate Route Records upstream, and forward along the source-route
+   subframe (decrementing the relay index per hop) with NWK security AAD that
+   includes the subframe.

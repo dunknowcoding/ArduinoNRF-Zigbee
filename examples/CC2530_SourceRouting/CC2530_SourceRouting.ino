@@ -113,6 +113,39 @@ void testSourceRouteTable() {
   check(freed >= 1 && !srt.has(0x0031), "stale path expired");
 }
 
+void testSourceRoutedFrame() {
+  Serial.println("Source-routed NWK data frame:");
+  const uint16_t relays[2] = {0x0002, 0x0009};  // concentrator -> ... -> dest
+  const char* msg = "hi";
+  uint8_t npdu[32];
+  // Originator sets relay index = relay count (all relays still ahead).
+  uint8_t n = ZigbeeNwk::buildDataFrameSourceRouted(
+      npdu, sizeof(npdu), 0x0031, 0x0000, 30, 7, relays, 2, 2,
+      (const uint8_t*)msg, 2);
+  check(n == 8 + (2 + 2 * 2) + 2, "frame = base(8) + subframe(6) + payload(2)");
+
+  NwkDataFrame f;
+  check(ZigbeeNwk::parseDataFrame(npdu, n, f), "parse source-routed frame");
+  check(f.sourceRoute, "source-route flag set");
+  check(f.srRelayCount == 2 && f.srRelayIndex == 2, "relay count + index");
+  uint16_t r0 = 0, r1 = 0;
+  ZigbeeNwk::getDataFrameRelay(f, 0, r0);
+  ZigbeeNwk::getDataFrameRelay(f, 1, r1);
+  check(r0 == 0x0002 && r1 == 0x0009, "relays parsed in order");
+  check(f.dstShort == 0x0031 && f.srcShort == 0x0000, "addresses past subframe");
+  check(f.payloadLen == 2 && f.payload[0] == 'h' && f.payload[1] == 'i',
+        "payload correctly located after the subframe");
+
+  // Regression: a plain data frame still parses with no source route.
+  uint8_t plain[16];
+  uint8_t pn = ZigbeeNwk::buildDataFrame(plain, sizeof(plain), 0x0031, 0x0000,
+                                         30, 8, (const uint8_t*)msg, 2);
+  NwkDataFrame pf;
+  check(ZigbeeNwk::parseDataFrame(plain, pn, pf) && !pf.sourceRoute &&
+            pf.payloadLen == 2,
+        "plain data frame unaffected (no source route)");
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial && millis() < 3000) {}
@@ -121,6 +154,7 @@ void setup() {
   testManyToOneRequest();
   testRouteRecord();
   testSourceRouteTable();
+  testSourceRoutedFrame();
 
   Serial.print("RESULT: "); Serial.print(passes); Serial.print(" passed, ");
   Serial.print(fails); Serial.println(" failed");

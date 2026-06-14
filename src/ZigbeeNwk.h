@@ -38,6 +38,11 @@ struct NwkDataFrame {
   uint16_t srcShort;
   uint8_t radius;
   uint8_t sequence;
+  // Source-route subframe (valid only when sourceRoute is set): the ordered
+  // relay list the frame is to follow, and the index of the next relay.
+  uint8_t srRelayCount;
+  uint8_t srRelayIndex;
+  const uint8_t* srRelayList;  // srRelayCount little-endian 16-bit relays
   const uint8_t* payload;
   uint8_t payloadLen;
 };
@@ -256,6 +261,21 @@ class ZigbeeNwk {
                                       NwkRouteRecordCommand& command);
   static bool getRouteRecordRelay(const NwkRouteRecordCommand& command,
                                   uint8_t index, uint16_t& relay);
+
+  /** Build a source-routed NWK data frame: the base header (with the
+      source-route FCF bit set) + the source-route subframe (relay count, relay
+      index, ordered relay list source->destination) + the payload. @p relayIndex
+      is the index of the next relay to use (the originator sets it to
+      relayCount, i.e. "all relays still ahead"). @return length, or 0 on error. */
+  static uint8_t buildDataFrameSourceRouted(
+      uint8_t* out, uint8_t outMax, uint16_t dstShort, uint16_t srcShort,
+      uint8_t radius, uint8_t sequence, const uint16_t* relays,
+      uint8_t relayCount, uint8_t relayIndex, const uint8_t* payload,
+      uint8_t payloadLen, uint8_t discoverRoute = NWK_DISCOVER_SUPPRESS);
+
+  /** Read the @p index-th relay of a parsed source-routed data frame. */
+  static bool getDataFrameRelay(const NwkDataFrame& frame, uint8_t index,
+                                uint16_t& relay);
 
   static uint8_t buildLeavePayload(uint8_t* out, uint8_t outMax,
                                    bool rejoin, bool request,

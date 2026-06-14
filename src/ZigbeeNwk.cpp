@@ -40,6 +40,37 @@ uint8_t ZigbeeNwk::buildDataFrame(uint8_t* out, uint8_t outMax,
   return (uint8_t)(kBaseHeaderLen + payloadLen);
 }
 
+uint8_t ZigbeeNwk::buildDataFrameSourceRouted(
+    uint8_t* out, uint8_t outMax, uint16_t dstShort, uint16_t srcShort,
+    uint8_t radius, uint8_t sequence, const uint16_t* relays,
+    uint8_t relayCount, uint8_t relayIndex, const uint8_t* payload,
+    uint8_t payloadLen, uint8_t discoverRoute) {
+  if (!out || discoverRoute > 3) return 0;
+  if (relayCount > 0 && !relays) return 0;
+  if (payloadLen > 0 && !payload) return 0;
+  uint8_t subframeLen = (uint8_t)(2 + relayCount * 2);  // count + index + relays
+  uint8_t headerLen = (uint8_t)(kBaseHeaderLen + subframeLen);
+  if ((uint16_t)headerLen + payloadLen > outMax) return 0;
+  if (payloadLen > kMaxPayload) return 0;
+
+  uint16_t fcf = 0;
+  fcf |= NWK_FRAME_DATA;
+  fcf |= (uint16_t)kProtocolVersion << 2;
+  fcf |= (uint16_t)(discoverRoute & 0x03) << 6;
+  fcf |= (uint16_t)1 << 10;  // source route present
+
+  writeLe16(&out[0], fcf);
+  writeLe16(&out[2], dstShort);
+  writeLe16(&out[4], srcShort);
+  out[6] = radius;
+  out[7] = sequence;
+  out[8] = relayCount;
+  out[9] = relayIndex;
+  for (uint8_t i = 0; i < relayCount; ++i) writeLe16(&out[10 + i * 2], relays[i]);
+  for (uint8_t i = 0; i < payloadLen; ++i) out[headerLen + i] = payload[i];
+  return (uint8_t)(headerLen + payloadLen);
+}
+
 bool ZigbeeNwk::parseDataFrame(const uint8_t* npdu, uint8_t len,
                                NwkDataFrame& frame) {
   frame = NwkDataFrame();
@@ -56,8 +87,24 @@ bool ZigbeeNwk::parseDataFrame(const uint8_t* npdu, uint8_t len,
   bool srcIeeePresent = (fcf & (1u << 12)) != 0;
 
   if (frameType != NWK_FRAME_DATA) return false;
-  if (multicast || security || sourceRoute || dstIeeePresent || srcIeeePresent) {
+  // The other NWK header extensions (multicast control, IEEE addresses) and
+  // pre-decryption security are still out of scope, but a source-route subframe
+  // is parsed below.
+  if (multicast || security || dstIeeePresent || srcIeeePresent) {
     return false;
+  }
+
+  uint8_t offset = kBaseHeaderLen;
+  uint8_t srRelayCount = 0, srRelayIndex = 0;
+  const uint8_t* srRelayList = nullptr;
+  if (sourceRoute) {
+    if (len < (uint8_t)(offset + 2)) return false;
+    srRelayCount = npdu[offset];
+    srRelayIndex = npdu[offset + 1];
+    uint8_t subframeLen = (uint8_t)(2 + srRelayCount * 2);
+    if (len < (uint8_t)(offset + subframeLen)) return false;
+    srRelayList = &npdu[offset + 2];
+    offset = (uint8_t)(offset + subframeLen);
   }
 
   frame.valid = true;
@@ -74,8 +121,21 @@ bool ZigbeeNwk::parseDataFrame(const uint8_t* npdu, uint8_t len,
   frame.srcShort = readLe16(&npdu[4]);
   frame.radius = npdu[6];
   frame.sequence = npdu[7];
-  frame.payload = &npdu[kBaseHeaderLen];
-  frame.payloadLen = (uint8_t)(len - kBaseHeaderLen);
+  frame.srRelayCount = srRelayCount;
+  frame.srRelayIndex = srRelayIndex;
+  frame.srRelayList = srRelayList;
+  frame.payload = &npdu[offset];
+  frame.payloadLen = (uint8_t)(len - offset);
+  return true;
+}
+
+bool ZigbeeNwk::getDataFrameRelay(const NwkDataFrame& frame, uint8_t index,
+                                  uint16_t& relay) {
+  if (!frame.valid || !frame.sourceRoute || !frame.srRelayList ||
+      index >= frame.srRelayCount) {
+    return false;
+  }
+  relay = readLe16(&frame.srRelayList[index * 2]);
   return true;
 }
 
