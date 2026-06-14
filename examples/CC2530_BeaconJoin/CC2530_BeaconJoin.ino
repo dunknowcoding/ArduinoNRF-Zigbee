@@ -526,7 +526,9 @@ void onApsData(const MacDataFrame& mac, const NwkDataFrame& nwk,
 void onApsAck(const MacDataFrame& mac, const NwkDataFrame& nwk,
               const ApsAckFrame& ack, int8_t rssi, uint8_t lqi) {
   (void)mac; (void)nwk; (void)rssi; (void)lqi;
-  if (ack.clusterId != APS_CLUSTER) return;
+  // Matches any pending entry by APS counter + endpoint: both the demo APS
+  // data plane (cluster APS_CLUSTER, endpoint APS_ENDPOINT) and the acked
+  // Mgmt_Lqi_rsp (cluster 0x8031, ZDO endpoint 0) clear here.
   if (apsRetx.onAck(ack.counter, ack.dstEndpoint)) {
     Serial.print("APS ACK ok cnt="); Serial.print(ack.counter);
     Serial.print(" (delivered "); Serial.print(apsRetx.stats().delivered);
@@ -583,13 +585,6 @@ void serviceRouteDiscovery() {
     ++apsCounter;
   }
 
-  ApsPending* due = apsRetx.due(millis());
-  if (due) {
-    sendApsRouted(due->dstShort, due->apdu, due->apduLen);
-    apsRetx.markAttempted(due, millis());
-    Serial.print("APS retransmit cnt="); Serial.println(due->apsCounter);
-  }
-
   // Periodically map the network: ask the coordinator for its neighbor table
   // (standard Mgmt_Lqi_req), re-sending until the rsp comes back.
   if (!mgmtLqiPending && (int32_t)(millis() - nextMgmtLqiCycleAt) >= 0) {
@@ -600,12 +595,14 @@ void serviceRouteDiscovery() {
     nextMgmtLqiCycleAt = millis() + 30000;
   }
   if (mgmtLqiPending && (int32_t)(millis() - mgmtLqiRetryAt) >= 0) {
-    if (mgmtLqiTries >= 12) {
+    if (mgmtLqiTries >= 6) {
       mgmtLqiPending = false;
-      Serial.println("Mgmt_Lqi: no rsp after 12 tries, giving up");
+      Serial.println("Mgmt_Lqi: no rsp after 6 tries, giving up");
     } else {
       ++mgmtLqiTries;
-      mgmtLqiRetryAt = millis() + 1500;
+      // Retry slowly (2.5 s): the responder answers once and retransmits its
+      // rsp on its own budget, so a fast req retry only adds channel traffic.
+      mgmtLqiRetryAt = millis() + 2500;
       uint8_t payload[2];
       uint8_t n = ZigbeeZdo::buildMgmtLqiRequest(payload, sizeof(payload),
                                                  mgmtLqiSeq, 0);
@@ -619,6 +616,19 @@ void serviceRouteDiscovery() {
       Serial.print(" -> 0x"); printHex16(target); Serial.println();
     }
   }
+}
+
+// Re-send any APS frame whose ACK is overdue. Runs for ALL roles: the end
+// device retransmits its data-plane frames to the coordinator, and the
+// coordinator (and any responder) retransmits the acked Mgmt_Lqi_rsp until the
+// requester ACKs it. Pending entries are matched/cleared by onApsAck.
+void serviceApsRetx() {
+  ApsPending* due = apsRetx.due(millis());
+  if (!due) return;
+  sendApsRouted(due->dstShort, due->apdu, due->apduLen);
+  apsRetx.markAttempted(due, millis());
+  Serial.print("APS retransmit cnt="); Serial.print(due->apsCounter);
+  Serial.print(" -> 0x"); printHex16(due->dstShort); Serial.println();
 }
 
 void serviceLinkStatusAndAging() {
@@ -666,6 +676,13 @@ void sendPendingMgmtLqiRsp() {
   if (!pendingLqiRsp) return;
   pendingLqiRsp = false;
 
+  // A requester re-sends its Mgmt_Lqi_req every couple of seconds until it gets
+  // the answer. If we still have an unacked rsp in flight to it, DON'T queue a
+  // second one - the existing entry's retransmits already cover delivery.
+  // Queueing one per request retry is what caused a retransmit storm that
+  // congested the half-duplex channel so badly the (longer) rsp never won air.
+  if (apsRetx.hasPendingFor(lqiRspTo, ZigbeeZdo::kEndpoint)) return;
+
   ZdoNeighborListEntry entries[4];
   uint8_t total = 0, listCount = 0;
   for (uint8_t i = 0; i < neighbors.capacity(); ++i) {
@@ -691,17 +708,30 @@ void sendPendingMgmtLqiRsp() {
                                               total, lqiRspStart, entries,
                                               listCount);
   if (n == 0) return;
-  uint16_t nh = routing.nextHopFor(lqiRspTo);
-  if (nh == ZigbeeRouting::kNoNextHop) nh = lqiRspTo;
-  bool ok = radio.sendZdoCommand(network.info().panId, nh,
-                                 network.info().nwkAddress, lqiRspTo,
-                                 network.info().nwkAddress, ZDO_MGMT_LQI_RSP,
-                                 payload, n, ZigbeeNwk::kDefaultRadius,
-                                 /*macAck=*/true);
+
+  // The Mgmt_Lqi_rsp is a long ZDO frame (~60 B encrypted). A single-shot send
+  // over the multi-hop A->B->C path was lost every time, while short APS
+  // data/ack with end-to-end retransmit got ~95%. So carry the rsp the same
+  // way: wrap it as an APS data frame with the APS ack-request bit set, send it
+  // over the route, and register it for retransmit. The requester ACKs it (see
+  // onZdoFrame), which clears the pending entry; until then loop()'s
+  // serviceApsRetx() re-sends it. Use the ZDO endpoint/profile so it still
+  // dispatches to onZdoFrame at the far end.
+  uint8_t apdu[ZigbeeAps::kMaxFrame];
+  uint8_t an = ZigbeeAps::buildDataFrame(
+      apdu, sizeof(apdu), ZigbeeZdo::kEndpoint, ZDO_MGMT_LQI_RSP,
+      ZigbeeAps::kProfileZigbeeDevice, ZigbeeZdo::kEndpoint, apsCounter, payload,
+      n, /*ackRequest=*/true);
+  if (an == 0) return;
+  bool ok = sendApsRouted(lqiRspTo, apdu, an);
+  apsRetx.add(lqiRspTo, apsCounter, ZigbeeZdo::kEndpoint, apdu, an,
+              /*maxRetries=*/3, /*intervalMs=*/2000, millis());
   Serial.print("Mgmt_Lqi rsp -> 0x"); printHex16(lqiRspTo);
   Serial.print(" ("); Serial.print(listCount); Serial.print("/");
-  Serial.print(total); Serial.print(" nb) via 0x"); printHex16(nh);
+  Serial.print(total); Serial.print(" nb, acked cnt=");
+  Serial.print(apsCounter); Serial.print(")");
   Serial.println(ok ? "" : " TX-FAIL");
+  ++apsCounter;
 }
 
 // Print the neighbor table a Mgmt_Lqi_rsp brought back.
@@ -746,6 +776,21 @@ void onZdoFrame(const MacDataFrame& mac, const NwkDataFrame& nwk,
     replyMgmtLqi(nwk, aps);
   } else if (aps.clusterId == ZDO_MGMT_LQI_RSP && forUs) {
     printMgmtLqiRsp(nwk, aps);
+    // The rsp is sent acked + retransmitted (it is too long to survive a
+    // single-shot multi-hop send). Return an APS ACK over the reverse route so
+    // the responder stops retransmitting. Duplicates (a retransmit that beat
+    // our ACK back) are harmless here: parse/print are idempotent.
+    if (aps.ackRequest) {
+      uint8_t ack[ZigbeeAps::kBaseHeaderLen];
+      uint8_t an = ZigbeeAps::buildAckFrame(ack, sizeof(ack), aps.srcEndpoint,
+                                            aps.clusterId, aps.profileId,
+                                            aps.dstEndpoint, aps.counter);
+      uint16_t nh = routing.nextHopFor(nwk.srcShort);
+      if (nh == ZigbeeRouting::kNoNextHop) nh = mac.srcShort;
+      radio.sendNwkData(network.info().panId, nh, network.info().nwkAddress,
+                        nwk.srcShort, network.info().nwkAddress, ack, an,
+                        ZigbeeNwk::kDefaultRadius, true);
+    }
   }
 }
 
@@ -770,10 +815,18 @@ void saveState() {
 
 // Read the saved blob; returns true and fills `s` when valid and ours.
 bool loadState(ZigbeePersistentState& s) {
+#if defined(NIUS_ZIGBEE_IGNORE_SAVED) && NIUS_ZIGBEE_IGNORE_SAVED
+  // Force a fresh scan/join, ignoring any persisted identity. Used to bring the
+  // whole bench up from a consistent state when boards have been reflashed
+  // separately and their saved addresses/routes no longer agree.
+  (void)s;
+  return false;
+#else
   uint8_t blob[ZigbeePersistence::kBlobSize];
   for (uint8_t i = 0; i < sizeof(blob); ++i) blob[i] = EEPROM.read(i);
   if (!ZigbeePersistence::deserialize(blob, sizeof(blob), s)) return false;
   return s.ieeeAddress == THIS_IEEE;
+#endif
 }
 
 void setup() {
@@ -852,6 +905,7 @@ void loop() {
   serviceLinkStatusAndAging();
   serviceRouteDiscovery();
   sendPendingMgmtLqiRsp();   // answer a recorded Mgmt_Lqi_req while radio idle
+  serviceApsRetx();          // retransmit any acked frame whose ACK is overdue
   if (ROLE_ROUTER && network.isJoined()) becomeParent();
 
   // Persist network state + frame counter periodically so a reboot restores
@@ -877,7 +931,7 @@ void loop() {
     if (IS_PARENT_CAPABLE) {
       Serial.print(" dup="); Serial.print(apsDuplicates);
     }
-    if (ROLE_END) {
+    {
       const ApsRetransmitStats& a = apsRetx.stats();
       Serial.print(" aps[q="); Serial.print(a.queued);
       Serial.print(" ok="); Serial.print(a.delivered);

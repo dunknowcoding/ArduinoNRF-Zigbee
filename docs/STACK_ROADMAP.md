@@ -235,16 +235,29 @@ while preserving the existing raw send / receive / sniffer APIs.
    address (0x0031) across a run with ~100% APS delivery, instead of taking a
    fresh address each re-association. Two follow-ups remain: Mgmt_Rtg example
    wiring, and the end device actually *receiving* the routed Mgmt_Lqi_rsp.
-   Diagnosed: the response never reaches the end device's NWK layer at all
-   (the end device sees the short APS data/ack frames at cluster 0x1042 but
-   never the 0x8031 response). sendZdoCommand routes through the same
-   sendNwkData as the data plane, so the difference is that the response is a
-   longer single-shot frame (~61 B encrypted vs ~34 B for an APS ack) with no
-   end-to-end retransmit, sent by a coordinator that is busy half-duplex under
-   the request/data/ack/link-status load (and replyMgmtLqi does not check the
-   TX return). Fix path: APS-acked ZDO (end-to-end retransmit like the data
-   plane), or check the rsp TX result and retry, or shorten/paginate the
-   response - a dedicated follow-up.
+   **FIXED + HW-verified (1-hop).** The rsp is now carried as an APS *data*
+   frame with the APS ack-request bit set (ZDO endpoint/profile, so it still
+   dispatches to `onZdoFrame` at the far end) and registered in the
+   `ZigbeeApsRetransmit` table - exactly like the data plane. The requester
+   ACKs it; the responder retransmits until the ACK arrives. A first naive
+   "queue an acked rsp per request" version caused a **retransmit storm** (the
+   requester re-sends its request every couple seconds until answered, so the
+   responder queued a fresh rsp + 5 retransmits per request retry, ~322
+   re-sends in a run, congesting the half-duplex channel so the *longer* rsp
+   never won air - delivered 0). Two changes fixed it: (a)
+   `ZigbeeApsRetransmit::hasPendingFor(dst, srcEndpoint)` lets the responder
+   keep **one rsp in flight per requester** (no per-retry re-queue), and (b)
+   gentler budgets (rsp 3x/2 s, request 6x/2.5 s). HW result on a clean 1-hop
+   A<->C star: every Mgmt_Lqi_req is answered on **try 1**, `Mgmt_Lqi_rsp from
+   0x0000` printed every cycle, and the APS data plane runs `q=44 ok=44 drop=0`
+   (100%, vs ok=0 during the storm). Lesson learned on the bench: the rsp
+   "multi-hop failure" was compounded by stale cross-board state (boards
+   reflashed separately disagree on addresses/routes) and the range-sim forcing
+   a restored direct-parent route that the simulated-deaf link can't carry; a
+   consistent fresh bring-up (`-DNIUS_ZIGBEE_IGNORE_SAVED=1`) is required to
+   test the mesh cleanly. Remaining: a genuine 2-hop verification through a
+   live relay (the mechanism is identical - `sendApsRouted` already routes via
+   the next hop and retransmits).
 5. **Persistence** - DONE for network identity + frame counter.
    `ZigbeePersistence` serializes the network state (PAN, ext PAN, channel,
    short/parent address, depth, device type, IEEE, outgoing security frame

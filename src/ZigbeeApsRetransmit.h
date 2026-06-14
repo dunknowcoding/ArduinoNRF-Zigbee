@@ -127,6 +127,20 @@ class ZigbeeApsRetransmit {
     return n;
   }
 
+  /** True if an unacked frame to this destination/source-endpoint is still in
+      flight. Lets a responder avoid queueing a duplicate (and starting a
+      retransmit storm) when a repeated request arrives before the first answer
+      has been acked - the existing entry's retransmits already cover it. */
+  bool hasPendingFor(uint16_t dstShort, uint8_t srcEndpoint) const {
+    if (!entries_) return false;
+    for (uint8_t i = 0; i < capacity_; ++i) {
+      const ApsPending& e = entries_[i];
+      if (e.used && e.dstShort == dstShort && e.srcEndpoint == srcEndpoint)
+        return true;
+    }
+    return false;
+  }
+
   const ApsRetransmitStats& stats() const { return stats_; }
 
  private:
