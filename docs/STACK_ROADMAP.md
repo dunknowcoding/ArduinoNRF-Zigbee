@@ -396,6 +396,9 @@ while preserving the existing raw send / receive / sniffer APIs.
     `ZigbeeGroupsCluster` builds the Add/Remove/Get-Membership command +
     response payloads and `handle()` applies an incoming command to the group
     table and produces the response (SUCCESS / DUPLICATE_EXISTS / NOT_FOUND /
-    INSUFFICIENT_SPACE), so a coordinator can drive membership remotely. What
-    remains: send group frames as a NWK broadcast to 0xFFFD on air (wire into
-    the example).
+    INSUFFICIENT_SPACE), so a coordinator can drive membership remotely. It is
+    also **HW-verified on air**: `CC2530_BeaconJoin -DNIUS_ZIGBEE_GROUPCAST=1`
+    has the coordinator broadcast a group-addressed ZCL On/Off Toggle (a group
+    APS frame inside a NWK-secured broadcast to 0xFFFD) every 8 s, and a member
+    end device parses it (`mic=0`) and toggles its built-in LED - verified as
+    alternating `LED=ON/OFF` on the bench. Group addressing is complete.

@@ -58,6 +58,14 @@
 #define NIUS_ZIGBEE_SECURE_JOIN 0
 #endif
 
+// Group multicast demo. When enabled, every node joins a demo group and the
+// coordinator periodically broadcasts a group-addressed ZCL On/Off Toggle (a
+// group APS frame inside a NWK broadcast to all rx-on devices); each member
+// toggles its built-in LED. Build all nodes with -DNIUS_ZIGBEE_GROUPCAST=1.
+#ifndef NIUS_ZIGBEE_GROUPCAST
+#define NIUS_ZIGBEE_GROUPCAST 0
+#endif
+
 static const uint16_t PAN_ID = NIUS_ZIGBEE_PAN_ID;
 static const uint64_t EXT_PAN_ID = 0x1A62195E00000000ULL;
 static const uint8_t COORD_CHANNEL = 15;
@@ -168,6 +176,16 @@ uint32_t keyXportAt = 0;
 // constant link key, so it is identical on the TC and the joiner.
 uint8_t gKtk[16];
 #endif
+
+#if NIUS_ZIGBEE_GROUPCAST
+static const uint16_t DEMO_GROUP = 0x0001;
+uint16_t groupStorage[4];
+ZigbeeGroupTable groups(groupStorage, 4);
+bool groupOnOff = false;             // local On/Off state, mirrored on the LED
+uint8_t groupZclSeq = 0;
+uint32_t nextGroupCastAt = 12000;    // coordinator broadcasts ~8 s apart
+#endif
+
 // Application-level reliable ZDO query: the Mgmt_Lqi_rsp is the acknowledgement,
 // so re-send the request until it arrives (ZDO frames carry no APS ack here).
 uint32_t nextMgmtLqiCycleAt = 20000;  // start a fresh query 20 s after boot
@@ -417,6 +435,34 @@ void serviceKeyTransport() {
 }
 #endif  // NIUS_ZIGBEE_SECURE_JOIN
 
+#if NIUS_ZIGBEE_GROUPCAST
+// Coordinator: broadcast a group-addressed ZCL On/Off Toggle to the demo group.
+// The group APS frame rides a NWK broadcast to all rx-on devices (NWK-secured);
+// every member toggles its LED, non-members ignore it.
+void serviceGroupCast() {
+  if (!IS_COORDINATOR || !network.isJoined()) return;
+  if ((int32_t)(millis() - nextGroupCastAt) < 0) return;
+  nextGroupCastAt = millis() + 8000;
+
+  uint8_t zcl[8];
+  uint8_t zn = ZigbeeZcl::buildCommandFrame(zcl, sizeof(zcl),
+                                            nzb::ZCL_FRAME_CLUSTER_SPECIFIC,
+                                            groupZclSeq++,
+                                            nzb::ZCL_ON_OFF_CMD_TOGGLE, nullptr, 0);
+  uint8_t apdu[ZigbeeAps::kMaxFrame];
+  uint8_t an = ZigbeeAps::buildGroupDataFrame(apdu, sizeof(apdu), DEMO_GROUP,
+                                              ZigbeeZcl::kClusterOnOff, APS_PROFILE,
+                                              APS_ENDPOINT, apsCounter++, zcl, zn);
+  bool ok = radio.sendNwkData(network.info().panId, ZigbeeMac::kBroadcastShort,
+                              network.info().nwkAddress,
+                              ZigbeeNwk::kBroadcastRxOnWhenIdle,
+                              network.info().nwkAddress, apdu, an,
+                              ZigbeeNwk::kDefaultRadius, false);
+  Serial.print("GROUPCAST -> group 0x"); printHex16(DEMO_GROUP);
+  Serial.println(ok ? " Toggle" : " Toggle TX-FAIL");
+}
+#endif  // NIUS_ZIGBEE_GROUPCAST
+
 void runActiveScan() {
   Serial.println("scanning...");
   network.beginScan(ROLE_END ? ZB_DEVICE_END_DEVICE : ZB_DEVICE_ROUTER);
@@ -624,6 +670,23 @@ void onApsData(const MacDataFrame& mac, const NwkDataFrame& nwk,
   // yet) on the reserved key-transport cluster, APS-encrypted under our link key.
   if (aps.clusterId == KEY_XPORT_CLUSTER && !IS_COORDINATOR && !keyInstalled) {
     installNetworkKeyFrom(aps.payload, aps.payloadLen);
+    return;
+  }
+#endif
+#if NIUS_ZIGBEE_GROUPCAST
+  // Group multicast: a group-addressed On/Off command we are a member of toggles
+  // the LED. (Non-members and other groups are ignored.)
+  if (aps.deliveryMode == APS_DELIVERY_GROUP &&
+      aps.clusterId == ZigbeeZcl::kClusterOnOff) {
+    if (groups.isMember(aps.groupAddress)) {
+      ZclFrame zcl;
+      if (ZigbeeZcl::parseFrame(aps.payload, aps.payloadLen, zcl)) {
+        ZigbeeZcl::applyOnOffCommand(zcl.commandId, groupOnOff);
+        digitalWrite(LED_BUILTIN, groupOnOff ? HIGH : LOW);
+        Serial.print("GROUPCAST rx group 0x"); printHex16(aps.groupAddress);
+        Serial.print(" -> LED="); Serial.println(groupOnOff ? "ON" : "OFF");
+      }
+    }
     return;
   }
 #endif
@@ -1014,6 +1077,14 @@ void setup() {
   apsRetx.begin(apsPendingStorage, 4);
   apsDupe.begin(apsDupeStorage, 6);
 
+#if NIUS_ZIGBEE_GROUPCAST
+  pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
+  groups.add(DEMO_GROUP);
+  Serial.print("GROUPCAST: joined group 0x"); printHex16(DEMO_GROUP);
+  Serial.println();
+#endif
+
   Serial.print("Node "); Serial.print(roleName());
   Serial.print(" ieee=0x"); printHex64(THIS_IEEE); Serial.println();
 
@@ -1068,6 +1139,9 @@ void loop() {
   serviceApsRetx();          // retransmit any acked frame whose ACK is overdue
 #if NIUS_ZIGBEE_SECURE_JOIN
   serviceKeyTransport();     // TC: deliver the network key to a new joiner
+#endif
+#if NIUS_ZIGBEE_GROUPCAST
+  serviceGroupCast();        // TC: broadcast a group On/Off toggle periodically
 #endif
   if (ROLE_ROUTER && network.isJoined()) becomeParent();
 
