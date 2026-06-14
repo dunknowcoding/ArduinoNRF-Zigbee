@@ -5,10 +5,14 @@ Host-side drivers that let an **ArduinoNRF (nRF52840)** board drive external
 the [ArduinoNRF](https://github.com/dunknowcoding/ArduinoNRF) board package —
 kept as a **separate library** so the board package stays small.
 
-Today it ships a complete, verified driver + firmware for the cheap
-**AliExpress CC2530 module**, giving you raw 802.15.4 **send / receive / sniff**.
-The architecture is built to grow to more modules and a future full‑Zigbee
-(Z‑Stack) backend.
+It ships a complete, verified driver + firmware for the cheap **AliExpress
+CC2530 module** (raw 802.15.4 **send / receive / sniff**) and, on top of it, a
+growing **host-side Zigbee PRO stack** built natively on the nRF52840 — active
+scan + join, AODV route discovery, multi-hop forwarding, AES-CCM* NWK **and**
+APS security, end-to-end acked delivery, fragmentation, binding, persistence,
+Trust-Center key-transport tooling, sleepy-end-device support, and network
+management (Mgmt_Lqi, broadcast transaction table, PAN-ID conflict). No TI
+Z-Stack required; a future ZNP backend can still live beside the raw driver.
 
 ## How it works
 
@@ -61,6 +65,19 @@ alongside the ArduinoNRF core.
    - **CC2530_OnOffCluster** — a tiny two-node On/Off cluster behavior demo
    - **CC2530_ClusterNode** — reusable Basic + On/Off cluster node demo
    - **CC2530_ReportingNode** — Configure Reporting + Report Attributes demo
+   - **CC2530_BeaconJoin** — the full mesh demo: scan/join, AODV routing,
+     multi-hop forwarding, NWK security, acked APS, Mgmt_Lqi, persistence
+     (build the roles with `-DNIUS_ZIGBEE_THIS_NODE=0x0001/0x0002/0x0003`)
+
+   Protocol self-tests (run on one board, e.g. board1 over a J-Link):
+   - **CC2530_ApsSecurity** — APS key-transport crypto (AES-MMO, HMAC,
+     specialized keys, CCM* Transport-Key envelope), 25/25
+   - **CC2530_Fragmentation** / **CC2530_KeyTransport** / **CC2530_Binding** —
+     APS fragment reassembly, TC key-transport frames, source binding table
+   - **CC2530_BroadcastTable** — broadcast dedup + passive-ack table, 22/22
+   - **CC2530_IndirectQueue** — sleepy-child Data Request + parent queue, 27/27
+   - **CC2530_EndDeviceTimeout** — SED keep-alive negotiation, 18/18
+   - **CC2530_PanIdConflict** — PAN-ID conflict detect + Network Report/Update, 16/16
 
 > Board layout note: some nice!nano-compatible bootloaders report
 > `SoftDevice: not found` in `INFO_UF2.TXT`. For those boards, select the
@@ -193,6 +210,39 @@ use the CC2530 Auto ACK path, request CCA transmit, and configure retry count.
 That is still below full Zigbee PRO, but it removes the earlier all-promiscuous
 assumption and gives the future join/routing/security work a real MAC base.
 
+## Zigbee PRO networking & security
+
+Layered on the MAC base, these host-side pieces bring the stack a long way
+toward Zigbee PRO. Each ships with a hardware self-test example.
+
+- **Network security (NWK).** `ZigbeeSecurity` protects every NWK frame with
+  AES-CCM* ENC-MIC-32 (Zigbee aux header, on-air level zeroing, frame-counter
+  replay table), computed on the nRF52840 hardware AES block. The CCM* core is
+  shared (`ZigbeeCcmStar.h`) with the APS layer.
+- **APS reliability.** `ZigbeeApsRetransmit` + `ZigbeeApsDuplicateTable` give
+  end-to-end acked delivery with retransmit and duplicate rejection;
+  `ZigbeeApsFragment` splits/reassembles payloads too large for one frame.
+- **Trust-Center key transport.** `ZigbeeApsKey` builds the APS Transport-Key /
+  Request-Key / Switch-Key commands; `ZigbeeApsSecurity` encrypts them at the
+  APS layer — AES-MMO hash, HMAC-MMO, the specialized key derivation
+  (key-transport / key-load keys from the link key), and an APS CCM* envelope.
+  `CC2530_BeaconJoin -DNIUS_ZIGBEE_SECURE_JOIN=1` wires it into the join so a
+  joiner that holds only the default link key "ZigBeeAlliance09" is given the
+  network key after associating (on-air key install is still being brought up).
+- **Routing & forwarding.** `ZigbeeRouting` runs AODV route discovery
+  (RREQ/RREP, reverse routes) and the example forwards multi-hop unicast with
+  per-hop re-encryption.
+- **Network management.** ZDO `Mgmt_Lqi` / `Mgmt_Rtg`, the `ZigbeeBroadcastTable`
+  (broadcast dedup + passive-ack), and `ZigbeePanIdConflict` (PAN-ID conflict
+  detection + Network Report/Update).
+- **Sleepy end devices.** `ZigbeeMac::buildDataRequest` + `ZigbeeIndirectQueue`
+  (parent-side buffered-frame store) + `ZigbeeEndDeviceTimeout` (keep-alive
+  negotiation). Setting the ack frame-pending bit on air needs CC2530 firmware
+  support; the host-side queue/keep-alive logic is done.
+- **Persistence & binding.** `ZigbeePersistence` serializes the network identity
+  + frame counter (anti-replay across reboots); `ZigbeeBindingTable` stores
+  source bindings with ZDO Bind/Unbind frames.
+
 ## Verified behavior
 
 Hardware verified with two ArduinoNRF ProMicro nRF52840 boards, each wired to a
@@ -281,23 +331,35 @@ CC2530 module:
   real 2-hop topology. Verified on hardware so far: the router joins the
   coordinator and becomes a parent (`children=1`, encrypted Link Status,
   `mic=0`); the full A-B-C routed ping is the remaining bring-up step.
+- **ZDO Mgmt_Lqi network mapping.** The end device queries the coordinator's
+  neighbor table; the response is carried as an APS-acked frame with single-in-
+  flight retransmit (an earlier naive version caused a retransmit storm). On a
+  clean 1-hop link the request is answered on the first try every cycle and the
+  acked APS data plane runs at 100% (`q=44 ok=44 drop=0`).
+- **Protocol self-tests on hardware** (one board, J-Link): APS key-transport
+  security 25/25 (`CC2530_ApsSecurity`), broadcast transaction table 22/22
+  (`CC2530_BroadcastTable`), indirect transmission 27/27 (`CC2530_IndirectQueue`),
+  End Device Timeout 18/18 (`CC2530_EndDeviceTimeout`), PAN-ID conflict 16/16
+  (`CC2530_PanIdConflict`), plus fragmentation / key-transport / binding.
 - Promiscuous examples can still show unrelated 802.15.4 traffic on the channel;
   filtered examples program PAN/short/IEEE addresses before exchanging frames.
 
 ## Current stack boundary
 
-NiusZigbee currently implements an SDCC CC2530 MAC/PHY backend plus small
-short-address MAC, MAC association command helpers, Zigbee NWK data/command and
-APS data-frame helpers, ZDO discovery/device-announcement payload helpers,
-static local Device Object descriptors, fixed neighbor/route tables, basic ZCL
-command-frame helpers, local network-state helpers, tiny reusable Basic / OnOff
-behavior helpers, and a boolean report scheduler, not a full Zigbee PRO stack.
-Missing full-stack pieces include beacon scan, automatic parent selection,
-production-grade join/rejoin state machines, actual neighbor aging/routing
-protocols, full ZCL cluster libraries, binding/groups, persistent reporting
-tables, Trust Center behavior, install codes, NWK/APS security, and Zigbee PRO
-route discovery/repair.
-A future ZNP / Z-Stack backend can live beside the raw driver. See
+NiusZigbee now implements a large, hardware-verified subset of Zigbee PRO on top
+of the SDCC CC2530 MAC/PHY backend: active scan + parent selection, MAC
+association join/rejoin, neighbor aging, AODV route discovery + multi-hop
+forwarding, NWK **and** APS AES-CCM* security, end-to-end acked delivery,
+fragmentation, ZDO discovery + network management (Mgmt_Lqi/Rtg), binding,
+persistence, Trust-Center key-transport tooling, broadcast transaction table,
+sleepy-end-device queue + keep-alive, and PAN-ID conflict frames.
+
+It is **not yet certified Zigbee PRO**. Remaining work includes: finishing the
+on-air secure-join key install, many-to-one routing + source routing (Route
+Record), setting the ack frame-pending bit (needs CC2530 firmware), full ZCL
+cluster libraries + groups, install codes, and APS-layer encrypted application
+data. A future ZNP / Z-Stack backend can still live beside the raw driver. See
+the milestone-by-milestone status in
 [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules
