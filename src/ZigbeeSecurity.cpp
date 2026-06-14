@@ -3,6 +3,8 @@
 #include <string.h>
 #include <NrfCrypto.h>  // ArduinoNRF core: hardware AES-128 ECB block
 
+#include "ZigbeeCcmStar.h"  // shared CCM* core (also used by ZigbeeApsSecurity)
+
 namespace nzb {
 
 namespace {
@@ -89,83 +91,11 @@ bool ZigbeeSecurity::ccmStar(bool encrypt, const uint8_t nonce[13],
                              const uint8_t* aad, uint8_t aadLen,
                              const uint8_t* in, uint8_t inLen, uint8_t* out,
                              const uint8_t* micIn, uint8_t* micOut) {
-  // CCM* with M = kMicLen (4) and L = 2 per IEEE 802.15.4 / Zigbee.
-  uint8_t block[16];
-  uint8_t x[16];
-
-  // ---- authentication (CBC-MAC over B0 | AAD | message) ----
-  block[0] = 0x40 |                       // Adata
-             (((kMicLen - 2) / 2) << 3) | // M' = (M-2)/2
-             0x01;                        // L' = L-1
-  memcpy(&block[1], nonce, 13);
-  block[14] = 0;
-  block[15] = inLen;  // l(m), big-endian 16-bit (inLen <= 116 fits low byte)
-  if (!NrfEcb::encrypt(key_, block, x)) return false;
-
-  // AAD: prefixed with its 16-bit big-endian length, zero-padded to blocks.
-  uint8_t pos = 0;
-  uint8_t chunk[16];
-  chunk[0] = 0;
-  chunk[1] = aadLen;
-  uint8_t fill = 2;
-  while (pos < aadLen) {
-    while (fill < 16 && pos < aadLen) chunk[fill++] = aad[pos++];
-    while (fill < 16) chunk[fill++] = 0;
-    for (uint8_t i = 0; i < 16; ++i) block[i] = x[i] ^ chunk[i];
-    if (!NrfEcb::encrypt(key_, block, x)) return false;
-    fill = 0;
-  }
-
-  // Message blocks. For decrypt, authentication runs over the PLAINTEXT, so
-  // the caller passes the already-decrypted bytes via `in` on that path too.
-  pos = 0;
-  while (pos < inLen) {
-    fill = 0;
-    while (fill < 16 && pos < inLen) chunk[fill++] = in[pos++];
-    while (fill < 16) chunk[fill++] = 0;
-    for (uint8_t i = 0; i < 16; ++i) block[i] = x[i] ^ chunk[i];
-    if (!NrfEcb::encrypt(key_, block, x)) return false;
-  }
-  // x now holds the CBC-MAC tag T (untruncated).
-
-  // ---- A0 keystream for the MIC ----
-  uint8_t a[16];
-  a[0] = 0x01;  // flags: L' = 1
-  memcpy(&a[1], nonce, 13);
-  a[14] = 0;
-  a[15] = 0;  // counter 0
-  uint8_t s0[16];
-  if (!NrfEcb::encrypt(key_, a, s0)) return false;
-
-  if (micOut) {
-    for (uint8_t i = 0; i < kMicLen; ++i) micOut[i] = x[i] ^ s0[i];
-  }
-  if (micIn) {
-    uint8_t diff = 0;
-    for (uint8_t i = 0; i < kMicLen; ++i) {
-      diff |= (uint8_t)(micIn[i] ^ x[i] ^ s0[i]);
-    }
-    if (diff != 0) return false;
-  }
-
-  // ---- CTR keystream for the payload (A1, A2, ...) ----
-  // (encrypt and decrypt are the same XOR; for decrypt the caller runs this
-  // FIRST to recover the plaintext, then re-enters for authentication.)
-  if (encrypt && out) {
-    uint16_t counter = 1;
-    pos = 0;
-    while (pos < inLen) {
-      a[14] = (uint8_t)(counter >> 8);
-      a[15] = (uint8_t)(counter & 0xFF);
-      ++counter;
-      uint8_t ks[16];
-      if (!NrfEcb::encrypt(key_, a, ks)) return false;
-      for (uint8_t i = 0; i < 16 && pos < inLen; ++i, ++pos) {
-        out[pos] = in[pos] ^ ks[i];
-      }
-    }
-  }
-  return true;
+  // CCM* with M = kMicLen (4) and L = 2 per IEEE 802.15.4 / Zigbee. Delegates
+  // to the shared core (ZigbeeCcmStar.h) so the NWK and APS layers run one
+  // hardware-verified implementation.
+  return ccmStarCrypt(encrypt, key_, kMicLen, nonce, aad, aadLen, in, inLen,
+                      out, micIn, micOut);
 }
 
 // ------------------------------------------------------------- public API

@@ -201,16 +201,26 @@ while preserving the existing raw send / receive / sniffer APIs.
 
 ## Remaining gaps toward Zigbee PRO (priority order)
 
-1. **Key transport** - command frames DONE; APS-layer encryption envelope is
-   the remaining integration. `ZigbeeApsKey` builds/parses the APS key
-   commands - Transport-Key (network key, 35 B), Request-Key (network or app
-   link key with partner), Switch-Key - and provides the default global TC
-   link key "ZigBeeAlliance09". `CC2530_KeyTransport` self-tests them
-   (10/10 PASS on hardware). What remains: encrypt the Transport-Key on air
-   at the APS layer under the link key (the CCM* primitive already exists in
-   `ZigbeeSecurity`; an APS nonce/AAD wrapper + the join-time handshake is the
-   wiring) and key rotation via keySeq. Frame-counter persistence is already
-   DONE (see item 5).
+1. **Key transport** - command frames DONE; APS-layer encryption envelope
+   DONE + HW-verified; join-time handshake remains. `ZigbeeApsKey` builds/parses
+   the APS key commands - Transport-Key (network key, 35 B), Request-Key
+   (network or app link key with partner), Switch-Key - and provides the
+   default global TC link key "ZigBeeAlliance09". `CC2530_KeyTransport`
+   self-tests them (10/10 PASS). `ZigbeeApsSecurity` now encrypts the
+   Transport-Key on air at the APS layer: AES-MMO hash + HMAC-over-MMO (Zigbee
+   B.6/B.1.4), the specialized key derivation (key-transport key =
+   HMAC(linkKey, 0x00), key-load key = HMAC(linkKey, 0x02)), and a CCM*
+   envelope (APS nonce = src IEEE | frame counter | security control; AAD =
+   APS header + aux header; on-air level zeroed) built on the SAME
+   hardware-verified CCM* core as the NWK layer (extracted into the shared
+   `ZigbeeCcmStar.h`, which `ZigbeeSecurity` now also uses). `CC2530_ApsSecurity`
+   self-tests it 25/25 on hardware: MMO cross-checked against the raw AES block,
+   specialized keys distinct + key-dependent, a full Transport-Key wrap under
+   the default TC link key round-trips and parses, and tampered
+   ciphertext/AAD/wrong-key are all MIC-rejected. What remains: drive the
+   envelope from the actual join sequence (TC sends the encrypted Transport-Key
+   when a device associates; joiner decrypts with its link key) and key
+   rotation via keySeq + Switch-Key. Frame-counter persistence is DONE (item 5).
 2. **Broadcast Transaction Table** - broadcast dedup/passive ack. Required
    for correct multi-hop RREQ/broadcast behavior (the current discovery
    table only dedups route requests).
