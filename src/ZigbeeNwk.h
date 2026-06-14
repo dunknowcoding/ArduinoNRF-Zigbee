@@ -23,6 +23,13 @@ enum NwkDiscoverRoute : uint8_t {
   NWK_DISCOVER_ENABLE = 1
 };
 
+// What a node should do with a received source-routed data frame.
+enum NwkSourceRouteAction : uint8_t {
+  NWK_SR_DELIVER = 0,  // this node is the destination - hand to the app
+  NWK_SR_RELAY = 1,    // forward to nextHop with the updated relay index
+  NWK_SR_DROP = 2,     // malformed, or this node is not on the path
+};
+
 struct NwkDataFrame {
   bool valid;
   uint8_t frameType;
@@ -265,8 +272,9 @@ class ZigbeeNwk {
   /** Build a source-routed NWK data frame: the base header (with the
       source-route FCF bit set) + the source-route subframe (relay count, relay
       index, ordered relay list source->destination) + the payload. @p relayIndex
-      is the index of the next relay to use (the originator sets it to
-      relayCount, i.e. "all relays still ahead"). @return length, or 0 on error. */
+      is the 0-based index of the relay expected to process the frame next; the
+      originator sets it to 0 and sends to relays[0] (see sourceRouteAction for
+      the forwarding rule). @return length, or 0 on error. */
   static uint8_t buildDataFrameSourceRouted(
       uint8_t* out, uint8_t outMax, uint16_t dstShort, uint16_t srcShort,
       uint8_t radius, uint8_t sequence, const uint16_t* relays,
@@ -276,6 +284,16 @@ class ZigbeeNwk {
   /** Read the @p index-th relay of a parsed source-routed data frame. */
   static bool getDataFrameRelay(const NwkDataFrame& frame, uint8_t index,
                                 uint16_t& relay);
+
+  /** Decide how a parsed source-routed data frame received at @p selfShort
+      should be handled. Convention: the relay list is ordered originator ->
+      destination and `srRelayIndex` is the 0-based index of the relay expected
+      to process the frame next (the originator sets it to 0, sending to
+      relays[0]). On NWK_SR_RELAY, @p nextHop is the address to forward to (the
+      next relay, or the destination if this was the last relay) and
+      @p outRelayIndex is the relay index to write into the forwarded frame. */
+  static uint8_t sourceRouteAction(const NwkDataFrame& frame, uint16_t selfShort,
+                                   uint16_t& nextHop, uint8_t& outRelayIndex);
 
   static uint8_t buildLeavePayload(uint8_t* out, uint8_t outMax,
                                    bool rejoin, bool request,

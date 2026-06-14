@@ -370,11 +370,15 @@ while preserving the existing raw send / receive / sniffer APIs.
    writes the subframe (relay count, relay index, ordered relay list) before the
    payload, and `parseDataFrame` parses it (exposing `srRelayCount` /
    `srRelayIndex` / `getDataFrameRelay`) instead of rejecting it - plain data
-   frames are unchanged. `CC2530_SourceRouting` self-tests it 30/30 on hardware.
-   What remains (OTA wiring): install the cheap many-to-one route on hearing the
-   MTORR, originate Route Records upstream, and forward along the source-route
-   subframe (decrementing the relay index per hop) with NWK security AAD that
-   includes the subframe.
+   frames are unchanged. The per-hop forwarding decision is implemented too:
+   `ZigbeeNwk::sourceRouteAction(frame, selfShort, nextHop, outRelayIndex)`
+   returns DELIVER (we are the destination) / RELAY (forward to the next relay,
+   or the destination if we were the last relay, with the updated relay index) /
+   DROP (off-path or malformed). `CC2530_SourceRouting` self-tests the frames +
+   the forwarding decision 34/34 on hardware. What remains (OTA wiring): call
+   sourceRouteAction in the example's onNwkData to relay on air, originate Route
+   Records upstream + many-to-one route install, and the NWK security AAD over
+   the subframe.
 10. **Install codes** - DONE (derivation + self-test). `ZigbeeInstallCode`
     validates an install code's CRC (CRC-16/X-25, checked against the standard
     "123456789" -> 0x906E vector), builds a code from a body, and derives the

@@ -139,6 +139,25 @@ bool ZigbeeNwk::getDataFrameRelay(const NwkDataFrame& frame, uint8_t index,
   return true;
 }
 
+uint8_t ZigbeeNwk::sourceRouteAction(const NwkDataFrame& frame,
+                                     uint16_t selfShort, uint16_t& nextHop,
+                                     uint8_t& outRelayIndex) {
+  if (!frame.valid || !frame.sourceRoute) return NWK_SR_DROP;
+  if (frame.dstShort == selfShort) return NWK_SR_DELIVER;  // we are the dest
+  if (!frame.srRelayList || frame.srRelayIndex >= frame.srRelayCount) {
+    return NWK_SR_DROP;  // no relay slot left but not the destination
+  }
+  // The frame should have reached the relay named at the current index.
+  uint16_t expected = readLe16(&frame.srRelayList[frame.srRelayIndex * 2]);
+  if (expected != selfShort) return NWK_SR_DROP;  // not on this path
+  uint8_t nextIdx = (uint8_t)(frame.srRelayIndex + 1);
+  nextHop = (nextIdx < frame.srRelayCount)
+                ? readLe16(&frame.srRelayList[nextIdx * 2])  // next relay
+                : frame.dstShort;                            // last relay -> dest
+  outRelayIndex = nextIdx;
+  return NWK_SR_RELAY;
+}
+
 uint8_t ZigbeeNwk::buildCommandFrame(uint8_t* out, uint8_t outMax,
                                      uint16_t dstShort, uint16_t srcShort,
                                      uint8_t radius, uint8_t sequence,
