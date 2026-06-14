@@ -43,6 +43,7 @@ enum MacAddressMode : uint8_t {
 enum MacCommandId : uint8_t {
   MAC_CMD_ASSOCIATION_REQUEST = 0x01,
   MAC_CMD_ASSOCIATION_RESPONSE = 0x02,
+  MAC_CMD_DATA_REQUEST = 0x04,  // a sleepy child polls its parent for buffered data
   MAC_CMD_BEACON_REQUEST = 0x07
 };
 
@@ -137,6 +138,14 @@ class ZigbeeMac {
   /** Build a broadcast Beacon Request MAC command (active scan probe). */
   static uint8_t buildBeaconRequest(uint8_t* out, uint8_t outMax,
                                     uint8_t sequence);
+
+  /** Build a MAC Data Request: a sleepy child polls its parent for any frame
+      buffered for it (indirect transmission). Short addressing, ack requested
+      (the parent's ack carries the frame-pending bit). PAN-ID compression on
+      (a child and its parent share the PAN). */
+  static uint8_t buildDataRequest(uint8_t* out, uint8_t outMax, uint16_t panId,
+                                  uint16_t parentShort, uint16_t childShort,
+                                  uint8_t sequence);
 
   /** Build a beaconless-PAN 802.15.4 beacon frame carrying @p payload. */
   static uint8_t buildBeacon(uint8_t* out, uint8_t outMax, uint16_t srcPanId,

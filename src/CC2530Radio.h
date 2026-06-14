@@ -25,6 +25,7 @@
 #include "ZigbeeApsKey.h"
 #include "ZigbeeApsSecurity.h"
 #include "ZigbeeBroadcastTable.h"
+#include "ZigbeeIndirectQueue.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -45,6 +46,7 @@ using nzb::MacBeaconFrame;
 using nzb::CC2530BeaconCallback;
 using nzb::MAC_CMD_ASSOCIATION_REQUEST;
 using nzb::MAC_CMD_ASSOCIATION_RESPONSE;
+using nzb::MAC_CMD_DATA_REQUEST;
 using nzb::MAC_CMD_BEACON_REQUEST;
 using nzb::MAC_ASSOC_SUCCESS;
 using nzb::MAC_ASSOC_PAN_AT_CAPACITY;
@@ -97,6 +99,8 @@ using nzb::ApsFragmentInfo;
 using nzb::ZigbeeApsReassembler;
 using nzb::ZigbeeBroadcastTable;
 using nzb::BroadcastEntry;
+using nzb::ZigbeeIndirectQueue;
+using nzb::IndirectEntry;
 using nzb::ZigbeeApsKey;
 using nzb::ZigbeeApsSecurity;
 using nzb::ApsSecurityKeyId;

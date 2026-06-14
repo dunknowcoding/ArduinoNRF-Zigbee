@@ -243,10 +243,19 @@ while preserving the existing raw send / receive / sniffer APIs.
    22/22 on hardware (dedup, passive-ack suppression, retry cap, expiry +
    recycle). What remains: wire it into the example's broadcast RX/TX path
    (RREQ, Link Status, Device_annce) so relays dedup + passively-ack on air.
-3. **Indirect transmission / sleepy end devices** - a parent-side pending
-   queue plus MAC Data Request handling so rx-off children can poll.
-   Needs CC2530 firmware support for the pending bit in acks (or host
-   emulation with relaxed timing).
+3. **Indirect transmission / sleepy end devices** - host-side DONE (frame +
+   queue + self-test); on-air pending bit needs CC2530 firmware. A sleepy child
+   polls its parent with a MAC Data Request (`ZigbeeMac::buildDataRequest`:
+   short-addressed, ack-requested, PAN-ID compressed); the parent buffers frames
+   for the child in `ZigbeeIndirectQueue` (enqueue keeps the latest frame per
+   child + refreshes the timeout, `pending`/`hasPending` answer a poll without
+   removing so a lost frame can be re-polled, `dequeue` on confirmed delivery,
+   `expire` ages out after macTransactionPersistenceTime ~7.68 s, oldest slot
+   reused when full). `CC2530_IndirectQueue` self-tests it 27/27 on hardware
+   (Data Request build+parse, enqueue/poll/peek/dequeue, replace-latest +
+   capacity reuse, expiry). What remains: set the frame-pending bit in the ack
+   to the Data Request on air, which needs CC2530 firmware support (or
+   relaxed-timing host emulation); `hasPending()` is the host-side input.
 4. **ZDO Mgmt_Lqi_rsp / Mgmt_Rtg_rsp** - DONE (frame tooling +
    Mgmt_Lqi HW-verified). `ZigbeeZdo` builds/parses Mgmt_Lqi_req /
    Mgmt_Lqi_rsp / Mgmt_Rtg_req / Mgmt_Rtg_rsp with neighbor-list (22 B) and

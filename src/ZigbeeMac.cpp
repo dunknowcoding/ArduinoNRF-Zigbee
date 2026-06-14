@@ -231,6 +231,30 @@ uint8_t ZigbeeMac::buildBeaconRequest(uint8_t* out, uint8_t outMax,
   return 8;
 }
 
+uint8_t ZigbeeMac::buildDataRequest(uint8_t* out, uint8_t outMax, uint16_t panId,
+                                    uint16_t parentShort, uint16_t childShort,
+                                    uint8_t sequence) {
+  if (!out || outMax < 10) return 0;
+
+  // FCF(2), seq(1), dst PAN(2), dst short(2), src short(2), command id(1).
+  // Ack requested so the parent's ack can carry the frame-pending bit; PAN-ID
+  // compression on (child and parent share the PAN, so the src PAN is omitted).
+  uint16_t fcf = 0;
+  fcf |= MAC_FRAME_COMMAND;
+  fcf |= 1u << 5;                          // ack request
+  fcf |= 1u << 6;                          // PAN ID compression
+  fcf |= (uint16_t)MAC_ADDR_SHORT << 10;   // dst short
+  fcf |= (uint16_t)MAC_ADDR_SHORT << 14;   // src short
+
+  writeLe16(&out[0], fcf);
+  out[2] = sequence;
+  writeLe16(&out[3], panId);
+  writeLe16(&out[5], parentShort);  // dst = parent
+  writeLe16(&out[7], childShort);   // src = child (no src PAN, compressed)
+  out[9] = MAC_CMD_DATA_REQUEST;
+  return 10;
+}
+
 uint8_t ZigbeeMac::buildBeacon(uint8_t* out, uint8_t outMax, uint16_t srcPanId,
                                uint16_t srcShort, uint8_t sequence,
                                bool panCoordinator, bool associationPermit,
