@@ -27,6 +27,7 @@
 #include "ZigbeeBroadcastTable.h"
 #include "ZigbeeIndirectQueue.h"
 #include "ZigbeeEndDeviceTimeout.h"
+#include "ZigbeePanIdConflict.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -113,6 +114,11 @@ using nzb::NWK_CMD_ED_TIMEOUT_REQUEST;
 using nzb::NWK_CMD_ED_TIMEOUT_RESPONSE;
 using nzb::NWK_CMD_NETWORK_REPORT;
 using nzb::NWK_CMD_NETWORK_UPDATE;
+using nzb::ZigbeePanIdConflict;
+using nzb::NwkNetworkReport;
+using nzb::NwkNetworkUpdate;
+using nzb::NWK_REPORT_PAN_ID_CONFLICT;
+using nzb::NWK_UPDATE_PAN_ID;
 using nzb::ZigbeeApsKey;
 using nzb::ZigbeeApsSecurity;
 using nzb::ApsSecurityKeyId;

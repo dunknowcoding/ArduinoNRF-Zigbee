@@ -334,8 +334,16 @@ while preserving the existing raw send / receive / sniffer APIs.
    general fix for long frames over the air, including the long Mgmt_Lqi
    response - wiring fragmentation into the multi-hop send/receive path is the
    remaining integration step.
-7. **PAN ID conflict resolution and network update** (updateId / channel
-   change propagation).
+7. **PAN ID conflict resolution and network update** - frames + detection DONE.
+   `ZigbeePanIdConflict` provides the conflict test (same 16-bit PAN ID +
+   different 64-bit extended PAN ID = a real clash, not our own network) and
+   builds/parses the NWK Network Report (0x09, PAN ID conflict: options + EPID +
+   conflicting PAN ID list) and Network Update (0x0A, PAN ID update: options +
+   EPID + nwkUpdateId + new PAN ID), with the 8-bit-wraparound update-id
+   freshness test so every node adopts the manager's newest value.
+   `CC2530_PanIdConflict` self-tests it 16/16 on hardware. What remains: drive
+   detection from heard beacons, the manager's new-PAN-ID selection, and
+   applying the update (and the analogous channel-change propagation).
 8. **Multi-hop relay** - DONE (code): routers answer beacon requests and
    accept children from a disjoint address pool, NWK unicast data frames
    whose destination is not the receiver are forwarded to the route's next
