@@ -15,6 +15,14 @@ Firmware v0.3 keeps `FRMFILT0.MAX_FRAME_VERSION` at the CC2530 reset value while
 enabling frame filtering. This is required for Zigbee data frames, which use
 IEEE 802.15.4-2006 frame version 1.
 
+Firmware v0.4 fixes a large-frame RX corruption: `radio_rx()` used to read the
+RXFIFO in a tight loop the moment `FIFOP` asserted, but `FIFOP` fires at the
+default ~64-byte threshold (i.e. mid-reception) for a large frame, so the read
+underran the FIFO and copied repeated stale bytes for the tail. Frames longer
+than ~70 bytes (e.g. an APS key-transport) arrived with a garbled cipher/MIC.
+The read now paces to reception (`while(RXFIFOCNT==0)` per byte, bounded so an
+aborted frame cannot hang it). Reflash every module after rebuilding.
+
 ## UART protocol
 
 ```

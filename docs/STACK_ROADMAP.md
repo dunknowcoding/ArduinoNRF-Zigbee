@@ -218,19 +218,22 @@ while preserving the existing raw send / receive / sniffer APIs.
    specialized keys distinct + key-dependent, a full Transport-Key wrap under
    the default TC link key round-trips and parses, and tampered
    ciphertext/AAD/wrong-key are all MIC-rejected. The join-time handshake is
-   wired into CC2530_BeaconJoin behind `-DNIUS_ZIGBEE_SECURE_JOIN=1`: the joiner
-   starts with ONLY the link key, the TC sends the encrypted Transport-Key (via
-   `radio.sendNwkDataUnsecured`, since the joiner has no network key yet) after
-   association, and confirms on the joiner's first secured Device_annce.
-   HW status: the frame is delivered end-to-end and reaches the joiner's APS
-   handler with the right cluster/endpoint/length (NWK rx -> APS rx cl=0x0009
-   len=53), but the APS CCM* MIC fails to verify ON AIR even though the
-   identical secureCommand->openCommand passes 25/25 in isolation and a same-size
-   NWK-*secured* frame (the Mgmt_Lqi rsp) delivers at 100%. The differentiator is
-   the NWK-*unsecured* large-frame path through the clone CC2530's UART; root
-   cause not yet isolated (suspected clone framing of the larger unsecured frame).
-   Remaining: crack the on-air MIC, then key rotation via keySeq + Switch-Key.
-   Frame-counter persistence is DONE (item 5).
+   wired into CC2530_BeaconJoin behind `-DNIUS_ZIGBEE_SECURE_JOIN=1` and is now
+   **HW-verified on air**: the joiner starts with ONLY the link key, the TC
+   sends the encrypted Transport-Key (via `radio.sendNwkDataUnsecured`, since
+   the joiner has no network key yet) after association, the joiner decrypts it
+   with its link key, installs the network key, and confirms with its first
+   secured Device_annce (`secure join COMPLETE`). The joiner then runs the
+   secured data plane (`mic=0`). This required a CC2530 firmware fix (v0.4): the
+   on-air MIC failures were a clone-radio bug, not the crypto - `radio_rx()`
+   read the RXFIFO in a tight loop the moment FIFOP asserted, but FIFOP fires at
+   the default ~64-byte threshold (mid-reception) for a large frame, so the read
+   underran the FIFO and copied repeated stale bytes for the frame tail (the
+   cipher/MIC), which only large frames (the ~80 B key transport) ever hit. The
+   fix paces each read to reception (`while(RXFIFOCNT==0)` per byte, bounded).
+   Remaining: key rotation via keySeq + Switch-Key, and the fresh-key-install
+   replay-counter resync (the joiner currently logs `rpl` churn right after
+   keying). Frame-counter persistence is DONE (item 5).
 2. **Broadcast Transaction Table** - DONE (data structure + self-test).
    `ZigbeeBroadcastTable` tracks each broadcast transaction = (NWK source,
    sequence number): `recordIncoming` returns NEW (process + rebroadcast once)

@@ -163,6 +163,10 @@ uint64_t keyXportIeee = 0;
 uint16_t keyXportAddr = 0;
 uint8_t keyXportTries = 0;
 uint32_t keyXportAt = 0;
+// Key-transport key derived ONCE at startup from the default TC link key, then
+// reused by the TC's send and the joiner's receive. Both ends use the same
+// constant link key, so it is identical on the TC and the joiner.
+uint8_t gKtk[16];
 #endif
 // Application-level reliable ZDO query: the Mgmt_Lqi_rsp is the acknowledgement,
 // so re-send the request until it arrives (ZDO frames carry no APS ack here).
@@ -346,15 +350,9 @@ void onBeacon(const MacBeaconFrame& beacon, int8_t rssi, uint8_t lqi) {
 // the key-transport key). Decrypt it with our link key and install the network
 // key so all later NWK traffic is secured.
 void installNetworkKeyFrom(const uint8_t* blob, uint8_t blobLen) {
-  uint8_t ktk[16];
-  if (!ZigbeeApsSecurity::deriveKeyTransportKey(
-          ZigbeeApsKey::defaultTcLinkKey(), ktk)) {
-    Serial.println("key xport: derive failed");
-    return;
-  }
   uint8_t plain[40];
   uint8_t n = ZigbeeApsSecurity::openCommand(blob, blobLen, /*apsHeaderLen=*/1,
-                                             ktk, plain, sizeof(plain));
+                                             gKtk, plain, sizeof(plain));
   if (n == 0) {
     Serial.println("key xport: APS decrypt/MIC FAILED");
     return;
@@ -396,16 +394,10 @@ void serviceKeyTransport() {
   uint8_t cmdLen = ZigbeeApsKey::buildTransportNetworkKey(cmd, sizeof(cmd), t);
   if (cmdLen == 0) { pendingKeyXport = false; return; }
 
-  uint8_t ktk[16];
-  if (!ZigbeeApsSecurity::deriveKeyTransportKey(ZigbeeApsKey::defaultTcLinkKey(),
-                                                ktk)) {
-    pendingKeyXport = false;
-    return;
-  }
   const uint8_t apsHeader[1] = {0x21};  // 1-byte AAD prefix (key-transport)
   uint8_t secured[80];
   uint8_t securedLen = ZigbeeApsSecurity::secureCommand(
-      apsHeader, sizeof(apsHeader), ktk, APS_SEC_KEY_KEY_TRANSPORT, THIS_IEEE,
+      apsHeader, sizeof(apsHeader), gKtk, APS_SEC_KEY_KEY_TRANSPORT, THIS_IEEE,
       apsSecCounter++, cmd, cmdLen, secured, sizeof(secured));
   if (securedLen == 0) { pendingKeyXport = false; return; }
 
@@ -1001,6 +993,8 @@ void setup() {
   // Only the Trust Center starts with the network key; a joiner receives it via
   // the APS Transport-Key after association (see serviceKeyTransport / onApsData).
   if (IS_COORDINATOR) security.setNetworkKey(NETWORK_KEY);
+  // Derive the key-transport key once at startup (both TC and joiner).
+  ZigbeeApsSecurity::deriveKeyTransportKey(ZigbeeApsKey::defaultTcLinkKey(), gKtk);
 #else
   security.setNetworkKey(NETWORK_KEY);  // pre-shared network key
 #endif

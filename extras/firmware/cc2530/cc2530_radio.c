@@ -23,7 +23,7 @@
  *     0x84 RX_FRAME [rssi lqi psdu..]
  */
 #define FW_VER_HI 0
-#define FW_VER_LO 3
+#define FW_VER_LO 4
 
 /* ---- SFRs ---- */
 __sfr __at (0xF1) PERCFG;
@@ -183,7 +183,17 @@ static unsigned char radio_rx(void){
   if(!(RFIRQF0 & IRQ_FIFOP)) return 0;
   len = RFD;                        /* first FIFO byte = frame length */
   if(len==0 || len>127){ RFST=STROBE_SFLUSHRX; RFIRQF0=0; return 0; }
-  for(i=0;i<len;i++) rxbuf[i]=RFD;  /* psdu + RSSI + (CRC|LQI) */
+  /* FIFOP asserts at the default threshold (~64 bytes), i.e. mid-reception for
+     a large frame, so reading RFD in a tight loop underruns the RXFIFO and
+     copies repeated stale bytes for the tail (a >~70 B frame arrives with its
+     cipher/MIC garbled). Pace each read to reception: wait for the byte to be
+     present (RXFIFOCNT > 0) before reading it, bounded so an aborted frame
+     (CRC discard mid-read) can't hang the loop forever. */
+  for(i=0;i<len;i++){
+    unsigned int guard=0;
+    while(RXFIFOCNT==0){ if(++guard==0){ RFST=STROBE_SFLUSHRX; RFIRQF0=0; return 0; } }
+    rxbuf[i]=RFD;                   /* psdu + RSSI + (CRC|LQI) */
+  }
   RFIRQF0=0;
   if(RXFIFOCNT==0){} else { RFST=STROBE_SFLUSHRX; }   /* drain leftovers */
   return len;

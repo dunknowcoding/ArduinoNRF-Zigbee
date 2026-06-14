@@ -228,7 +228,10 @@ toward Zigbee PRO. Each ships with a hardware self-test example.
   (key-transport / key-load keys from the link key), and an APS CCM* envelope.
   `CC2530_BeaconJoin -DNIUS_ZIGBEE_SECURE_JOIN=1` wires it into the join so a
   joiner that holds only the default link key "ZigBeeAlliance09" is given the
-  network key after associating (on-air key install is still being brought up).
+  network key after associating — HW-verified end to end (the joiner decrypts
+  the key, installs it, and runs the secured data plane with `mic=0`). This
+  needs CC2530 firmware v0.4, which fixes a clone RXFIFO underrun that corrupted
+  the tail of large (~80 B) received frames.
 - **Routing & forwarding.** `ZigbeeRouting` runs AODV route discovery
   (RREQ/RREP, reverse routes) and the example forwards multi-hop unicast with
   per-hop re-encryption.
@@ -250,7 +253,7 @@ CC2530 module:
 
 - `CC2530_FlashFirmware` detects `0xA5xx`, flashes the SDCC transceiver, and
   verifies read-back.
-- `CC2530_Info` reports firmware `v0.3` and repeated `ping -> PONG`.
+- `CC2530_Info` reports firmware `v0.4` and repeated `ping -> PONG`.
 - `CC2530_MacControl` writes PAN/short/IEEE address, enables filtering +
   Auto ACK + CCA TX with three retries, and reads the settings back.
 - `CC2530_Link` on two boards shows `TX "hello N" ok` and reciprocal
