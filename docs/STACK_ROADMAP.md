@@ -375,10 +375,15 @@ while preserving the existing raw send / receive / sniffer APIs.
    returns DELIVER (we are the destination) / RELAY (forward to the next relay,
    or the destination if we were the last relay, with the updated relay index) /
    DROP (off-path or malformed). `CC2530_SourceRouting` self-tests the frames +
-   the forwarding decision 34/34 on hardware. What remains (OTA wiring): call
-   sourceRouteAction in the example's onNwkData to relay on air, originate Route
-   Records upstream + many-to-one route install, and the NWK security AAD over
-   the subframe.
+   the forwarding decision 34/34 on hardware. The relay is wired into the
+   example: `CC2530_BeaconJoin -DNIUS_ZIGBEE_SOURCEROUTE=1` makes a router that
+   receives a source-routed frame not addressed to it rebuild it with the
+   advanced relay index and forward it to the next hop named in the subframe
+   (unsecured, via `radio.sendData`). What remains: a concentrator that
+   originates source-routed frames from collected Route Records, and NWK
+   security AAD over the (mutable-relay-index) subframe so secured frames can be
+   source-routed. Multi-board OTA verification needs a stable 2-hop bench (the
+   co-located radios only form one via the flaky range-sim).
 10. **Install codes** - DONE (derivation + self-test). `ZigbeeInstallCode`
     validates an install code's CRC (CRC-16/X-25, checked against the standard
     "123456789" -> 0x906E vector), builds a code from a body, and derives the

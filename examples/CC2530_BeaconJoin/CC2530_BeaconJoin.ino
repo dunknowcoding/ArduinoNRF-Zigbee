@@ -66,6 +66,16 @@
 #define NIUS_ZIGBEE_GROUPCAST 0
 #endif
 
+// Source-route relaying: when enabled, a router that receives a source-routed
+// NWK data frame not addressed to it forwards it to the next hop named in the
+// frame's source-route subframe (ZigbeeNwk::sourceRouteAction), instead of a
+// route-table lookup. The forwarding decision is self-tested in
+// CC2530_SourceRouting; this is its on-air wiring. Build with
+// -DNIUS_ZIGBEE_SOURCEROUTE=1.
+#ifndef NIUS_ZIGBEE_SOURCEROUTE
+#define NIUS_ZIGBEE_SOURCEROUTE 0
+#endif
+
 static const uint16_t PAN_ID = NIUS_ZIGBEE_PAN_ID;
 static const uint64_t EXT_PAN_ID = 0x1A62195E00000000ULL;
 static const uint8_t COORD_CHANNEL = 15;
@@ -621,6 +631,37 @@ void onNwkData(const MacDataFrame& mac, const NwkDataFrame& nwk, int8_t rssi,
     routes.upsert(nwk.srcShort, mac.srcShort, ZB_ROUTE_ACTIVE);
   }
 
+#if NIUS_ZIGBEE_SOURCEROUTE
+  // Source-route relaying: if the frame carries a source-route subframe, follow
+  // it (next hop named in the frame) rather than the route table. The frame is
+  // rebuilt with the advanced relay index and forwarded unsecured.
+  if (nwk.sourceRoute && nwk.dstShort != network.info().nwkAddress) {
+    uint16_t nextHop = 0;
+    uint8_t outIdx = 0;
+    uint8_t act = ZigbeeNwk::sourceRouteAction(nwk, network.info().nwkAddress,
+                                               nextHop, outIdx);
+    if (act != NWK_SR_RELAY) return;  // DROP (off-path); DELIVER can't happen here
+    uint16_t relays[8];
+    uint8_t rc = nwk.srRelayCount < 8 ? nwk.srRelayCount : 8;
+    for (uint8_t i = 0; i < rc; ++i) ZigbeeNwk::getDataFrameRelay(nwk, i, relays[i]);
+    uint8_t payload[ZigbeeNwk::kMaxPayload];
+    if (nwk.payloadLen > sizeof(payload)) return;
+    memcpy(payload, nwk.payload, nwk.payloadLen);
+    uint8_t out[ZigbeeNwk::kMaxFrame + 24];
+    uint8_t n = ZigbeeNwk::buildDataFrameSourceRouted(
+        out, sizeof(out), nwk.dstShort, nwk.srcShort,
+        (uint8_t)(nwk.radius > 1 ? nwk.radius - 1 : 1), nwk.sequence, relays, rc,
+        outIdx, payload, nwk.payloadLen);
+    bool ok = n > 0 && radio.sendData(network.info().panId, nextHop,
+                                      network.info().nwkAddress, out, n, true);
+    if (ok) ++forwarded;
+    Serial.print("SRCROUTE relay 0x"); printHex16(nwk.srcShort);
+    Serial.print("->0x"); printHex16(nwk.dstShort);
+    Serial.print(" via 0x"); printHex16(nextHop);
+    Serial.println(ok ? "" : " FAILED");
+    return;
+  }
+#endif
   // Forwarding: a unicast frame whose NWK destination is not us is relayed to
   // the route's next hop (radius-1, re-encrypted for the next hop). Copy the
   // payload out of the decrypt scratch before re-sending.
