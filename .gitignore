@@ -9,3 +9,7 @@
 *.lk
 .build/
 build/
+
+# SDCC build intermediates
+extras/firmware/cc2530/*.ihx
+extras/firmware/cc2530/*.rst
