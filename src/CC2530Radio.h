@@ -33,6 +33,7 @@
 #include "ZigbeeGroupTable.h"
 #include "ZigbeeGroupsCluster.h"
 #include "ZigbeeLevelControlCluster.h"
+#include "ZigbeeIdentifyCluster.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -135,6 +136,11 @@ using nzb::LEVEL_CMD_MOVE;
 using nzb::LEVEL_CMD_STOP;
 using nzb::LEVEL_DIR_UP;
 using nzb::LEVEL_DIR_DOWN;
+using nzb::ZigbeeIdentifyCluster;
+using nzb::IDENTIFY_CMD_IDENTIFY;
+using nzb::IDENTIFY_CMD_QUERY;
+using nzb::IDENTIFY_CMD_TRIGGER_EFFECT;
+using nzb::IDENTIFY_EFFECT_BLINK;
 using nzb::GROUPS_CMD_ADD;
 using nzb::GROUPS_CMD_REMOVE;
 using nzb::GROUPS_CMD_REMOVE_ALL;

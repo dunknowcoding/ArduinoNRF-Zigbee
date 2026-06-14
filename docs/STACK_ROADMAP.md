@@ -408,5 +408,8 @@ while preserving the existing raw send / receive / sniffer APIs.
     Level Control (`ZigbeeLevelControlCluster`, the dimming half of a dimmable
     light: Move to Level / Move / Step / Stop command payloads + apply-to-level
     behavior with 0..254 clamping). `CC2530_LevelControl` self-tests it 10/10 on
-    hardware. What remains for a full ZCL library: Identify, Scenes, Color
-    Control, and the other Home Automation clusters.
+    hardware. Identify (`ZigbeeIdentifyCluster`, 0x0003) is included: Identify /
+    Identify Query Response / Trigger Effect payloads + the IdentifyTime
+    countdown (apply / tick-per-second / isIdentifying) used during commissioning
+    to make a device blink; `CC2530_Identify` self-tests it 13/13. What remains
+    for a full ZCL library: Scenes, Color Control, and the other HA clusters.
