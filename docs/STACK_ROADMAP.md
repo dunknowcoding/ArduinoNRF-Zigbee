@@ -375,3 +375,12 @@ while preserving the existing raw send / receive / sniffer APIs.
    MTORR, originate Route Records upstream, and forward along the source-route
    subframe (decrementing the relay index per hop) with NWK security AAD that
    includes the subframe.
+10. **Install codes** - DONE (derivation + self-test). `ZigbeeInstallCode`
+    validates an install code's CRC (CRC-16/X-25, checked against the standard
+    "123456789" -> 0x906E vector), builds a code from a body, and derives the
+    per-device Trust Center link key as the AES-MMO-128 hash of the full code
+    (reusing `ZigbeeApsSecurity::aesMmoHash`). This is the per-device
+    alternative to the global "ZigBeeAlliance09" link key for APS key transport.
+    `CC2530_InstallCode` self-tests it 11/11 on hardware. What remains: feed the
+    derived key into the secure-join handshake (per-joiner link key instead of
+    the default) and a real spec install-code -> key reference vector.
