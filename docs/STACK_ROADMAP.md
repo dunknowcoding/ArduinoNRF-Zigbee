@@ -384,3 +384,14 @@ while preserving the existing raw send / receive / sniffer APIs.
     `CC2530_InstallCode` self-tests it 11/11 on hardware. What remains: feed the
     derived key into the secure-join handshake (per-joiner link key instead of
     the default) and a real spec install-code -> key reference vector.
+11. **Group addressing / multicast** - frames + membership DONE.
+    `ZigbeeAps::buildGroupDataFrame` builds a group-addressed APS data frame
+    (delivery mode = group, a 16-bit group address in place of the destination
+    endpoint, 9-byte header) and `parseDataFrame` now parses it (unicast frames
+    unchanged). `ZigbeeGroupTable` is the device's group membership store
+    (join/leave/isMember/enumerate); the receive path delivers a group frame to
+    the app only if `isMember(groupAddress)`. `CC2530_GroupCast` self-tests it
+    23/23 on hardware (group frame round-trip, unicast regression, membership,
+    accept/ignore by membership). What remains: send group frames as a NWK
+    broadcast to 0xFFFD on air, and the ZCL Groups cluster (Add/Remove/View
+    Group) to drive membership remotely.

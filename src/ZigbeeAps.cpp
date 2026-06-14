@@ -28,6 +28,32 @@ uint8_t ZigbeeAps::buildDataFrame(uint8_t* out, uint8_t outMax,
   return (uint8_t)(kBaseHeaderLen + payloadLen);
 }
 
+uint8_t ZigbeeAps::buildGroupDataFrame(uint8_t* out, uint8_t outMax,
+                                       uint16_t groupAddress, uint16_t clusterId,
+                                       uint16_t profileId, uint8_t srcEndpoint,
+                                       uint8_t counter, const uint8_t* payload,
+                                       uint8_t payloadLen, bool ackRequest) {
+  if (!out) return 0;
+  if (payloadLen > (uint8_t)(kMaxFrame - kGroupHeaderLen)) return 0;
+  if (outMax < (uint8_t)(kGroupHeaderLen + payloadLen)) return 0;
+  if (payloadLen > 0 && !payload) return 0;
+
+  uint8_t fcf = APS_FRAME_DATA;
+  fcf |= (uint8_t)(APS_DELIVERY_GROUP << 2);
+  if (ackRequest) fcf |= 1u << 6;
+
+  out[0] = fcf;
+  writeLe16(&out[1], groupAddress);
+  writeLe16(&out[3], clusterId);
+  writeLe16(&out[5], profileId);
+  out[7] = srcEndpoint;
+  out[8] = counter;
+  for (uint8_t i = 0; i < payloadLen; ++i) {
+    out[kGroupHeaderLen + i] = payload[i];
+  }
+  return (uint8_t)(kGroupHeaderLen + payloadLen);
+}
+
 uint8_t ZigbeeAps::frameType(const uint8_t* apdu, uint8_t len) {
   if (!apdu || len < 1) return 0xFF;
   return (uint8_t)(apdu[0] & 0x03);
@@ -82,7 +108,8 @@ bool ZigbeeAps::parseDataFrame(const uint8_t* apdu, uint8_t len,
   bool extendedHeader = (fcf & (1u << 7)) != 0;
 
   if (frameType != APS_FRAME_DATA) return false;
-  if (deliveryMode != APS_DELIVERY_UNICAST || security || extendedHeader) {
+  if (security || extendedHeader) return false;
+  if (deliveryMode != APS_DELIVERY_UNICAST && deliveryMode != APS_DELIVERY_GROUP) {
     return false;
   }
 
@@ -92,13 +119,27 @@ bool ZigbeeAps::parseDataFrame(const uint8_t* apdu, uint8_t len,
   frame.ackRequest = (fcf & (1u << 6)) != 0;
   frame.security = security;
   frame.extendedHeader = extendedHeader;
-  frame.dstEndpoint = apdu[1];
-  frame.clusterId = readLe16(&apdu[2]);
-  frame.profileId = readLe16(&apdu[4]);
-  frame.srcEndpoint = apdu[6];
-  frame.counter = apdu[7];
-  frame.payload = &apdu[kBaseHeaderLen];
-  frame.payloadLen = (uint8_t)(len - kBaseHeaderLen);
+
+  uint8_t hdr;
+  if (deliveryMode == APS_DELIVERY_GROUP) {
+    // FCF(1) group(2) cluster(2) profile(2) srcEp(1) counter(1) = 9.
+    if (len < kGroupHeaderLen) return false;
+    frame.groupAddress = readLe16(&apdu[1]);
+    frame.clusterId = readLe16(&apdu[3]);
+    frame.profileId = readLe16(&apdu[5]);
+    frame.srcEndpoint = apdu[7];
+    frame.counter = apdu[8];
+    hdr = kGroupHeaderLen;
+  } else {
+    frame.dstEndpoint = apdu[1];
+    frame.clusterId = readLe16(&apdu[2]);
+    frame.profileId = readLe16(&apdu[4]);
+    frame.srcEndpoint = apdu[6];
+    frame.counter = apdu[7];
+    hdr = kBaseHeaderLen;
+  }
+  frame.payload = &apdu[hdr];
+  frame.payloadLen = (uint8_t)(len - hdr);
   return true;
 }
 

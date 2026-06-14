@@ -31,7 +31,8 @@ struct ApsDataFrame {
   bool ackRequest;
   bool security;
   bool extendedHeader;
-  uint8_t dstEndpoint;
+  uint8_t dstEndpoint;    // valid for unicast delivery
+  uint16_t groupAddress;  // valid for group delivery (deliveryMode == GROUP)
   uint16_t clusterId;
   uint16_t profileId;
   uint8_t srcEndpoint;
@@ -55,6 +56,7 @@ struct ApsAckFrame {
 class ZigbeeAps {
  public:
   static const uint8_t kBaseHeaderLen = 8;
+  static const uint8_t kGroupHeaderLen = 9;  // group(2) replaces dstEndpoint(1)
   static const uint8_t kMaxFrame = 108;
   static const uint8_t kMaxPayload = kMaxFrame - kBaseHeaderLen;
   static const uint16_t kProfileHomeAutomation = 0x0104;
@@ -69,6 +71,16 @@ class ZigbeeAps {
 
   static bool parseDataFrame(const uint8_t* apdu, uint8_t len,
                              ApsDataFrame& frame);
+
+  /** Build a GROUP-addressed APS data frame: delivery mode = group, with a
+      16-bit group address in place of the destination endpoint (no dst endpoint
+      - every member endpoint of the group receives it). Layout: FCF(1) +
+      group(2) + cluster(2) + profile(2) + src endpoint(1) + counter(1) = 9. */
+  static uint8_t buildGroupDataFrame(uint8_t* out, uint8_t outMax,
+                                     uint16_t groupAddress, uint16_t clusterId,
+                                     uint16_t profileId, uint8_t srcEndpoint,
+                                     uint8_t counter, const uint8_t* payload,
+                                     uint8_t payloadLen, bool ackRequest = false);
 
   /** APS frame type of an APDU (APS_FRAME_DATA / _COMMAND / _ACK), or 0xFF
       if too short to tell. Lets a receiver branch before full parsing. */

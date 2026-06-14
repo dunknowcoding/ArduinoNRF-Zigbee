@@ -30,6 +30,7 @@
 #include "ZigbeePanIdConflict.h"
 #include "ZigbeeSourceRouteTable.h"
 #include "ZigbeeInstallCode.h"
+#include "ZigbeeGroupTable.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -123,6 +124,9 @@ using nzb::ZigbeeSourceRouteTable;
 using nzb::SourceRouteEntry;
 using nzb::NWK_CMD_ROUTE_RECORD;
 using nzb::ZigbeeInstallCode;
+using nzb::ZigbeeGroupTable;
+using nzb::APS_DELIVERY_UNICAST;
+using nzb::APS_DELIVERY_GROUP;
 using nzb::NWK_REPORT_PAN_ID_CONFLICT;
 using nzb::NWK_UPDATE_PAN_ID;
 using nzb::ZigbeeApsKey;
