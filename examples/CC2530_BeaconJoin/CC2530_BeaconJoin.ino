@@ -47,6 +47,17 @@
 #define ROLE_ROUTER (NIUS_ZIGBEE_THIS_NODE == 0x0002)
 #define ROLE_END    (NIUS_ZIGBEE_THIS_NODE == 0x0003)
 
+// Secure commissioning (Zigbee-3.0-style key transport). When enabled, the
+// joiner starts with ONLY the default Trust Center link key "ZigBeeAlliance09"
+// and does not know the network key; the Trust Center (coordinator) delivers
+// the network key after association inside an APS Transport-Key command,
+// encrypted at the APS layer under the key-transport key and sent NWK-
+// unsecured. Demonstrated 1-hop (coordinator + end device); build all nodes
+// with -DNIUS_ZIGBEE_SECURE_JOIN=1 -DNIUS_ZIGBEE_IGNORE_SAVED=1.
+#ifndef NIUS_ZIGBEE_SECURE_JOIN
+#define NIUS_ZIGBEE_SECURE_JOIN 0
+#endif
+
 static const uint16_t PAN_ID = NIUS_ZIGBEE_PAN_ID;
 static const uint64_t EXT_PAN_ID = 0x1A62195E00000000ULL;
 static const uint8_t COORD_CHANNEL = 15;
@@ -82,7 +93,14 @@ static const uint16_t IGNORE_PEER_SHORT = 0xFFFF;
 static const uint64_t IGNORE_PEER_IEEE = 0xFFFFFFFFFFFFFFFFULL;
 #endif
 
+#if NIUS_ZIGBEE_SECURE_JOIN
+// Secure-join demo is 1-hop (joiner <-> Trust Center): scan only the
+// coordinator's channel so the joiner associates with the TC directly rather
+// than a router that cannot deliver the network key.
+static const uint8_t SCAN_CHANNELS[] = {COORD_CHANNEL};
+#else
 static const uint8_t SCAN_CHANNELS[] = {11, 15, 20, 25};
+#endif
 static const uint8_t SCAN_CHANNEL_COUNT =
     sizeof(SCAN_CHANNELS) / sizeof(SCAN_CHANNELS[0]);
 static const uint16_t SCAN_DWELL_MS = 250;
@@ -131,6 +149,21 @@ static const uint16_t APS_CLUSTER = 0x1042;   // a private test cluster
 static const uint16_t APS_PROFILE = 0x0104;   // Home Automation
 uint8_t apsCounter = 0;
 uint32_t apsSeq = 0, nextApsSendAt = 0;
+
+#if NIUS_ZIGBEE_SECURE_JOIN
+// Secure-join key transport. The key-transport command rides an APS data frame
+// on a reserved endpoint/cluster, NWK-unsecured, with the APS payload being the
+// ZigbeeApsSecurity envelope (aux header + ciphertext + MIC).
+static const uint8_t KEY_XPORT_EP = 2;
+static const uint16_t KEY_XPORT_CLUSTER = 0x0009;  // key-transport carrier
+bool keyInstalled = false;          // joiner: network key received + installed?
+uint32_t apsSecCounter = 1;         // TC: APS security frame counter
+bool pendingKeyXport = false;       // TC: a joiner is awaiting its key
+uint64_t keyXportIeee = 0;
+uint16_t keyXportAddr = 0;
+uint8_t keyXportTries = 0;
+uint32_t keyXportAt = 0;
+#endif
 // Application-level reliable ZDO query: the Mgmt_Lqi_rsp is the acknowledgement,
 // so re-send the request until it arrives (ZDO frames carry no APS ack here).
 uint32_t nextMgmtLqiCycleAt = 20000;  // start a fresh query 20 s after boot
@@ -224,6 +257,18 @@ void onMacCommand(const MacCommandFrame& frame, int8_t rssi, uint8_t lqi) {
     ZigbeeAssociationDecision decision =
         network.handleAssociationRequest(frame.srcIeee, request, lqi & 0x7F);
     if (decision.accepted) security.resetReplayTable();
+#if NIUS_ZIGBEE_SECURE_JOIN
+    // Trust Center: schedule delivery of the network key to this joiner. A
+    // short delay lets the joiner finish setting its MAC address filter so the
+    // unicast key-transport is accepted.
+    if (decision.accepted && IS_COORDINATOR) {
+      pendingKeyXport = true;
+      keyXportIeee = frame.srcIeee;
+      keyXportAddr = decision.assignedAddress;
+      keyXportTries = 0;
+      keyXportAt = millis() + 350;
+    }
+#endif
     bool ok = radio.sendAssociationResponse(
         network.info().panId, frame.srcIeee, network.info().nwkAddress,
         decision.assignedAddress, decision.status, true);
@@ -296,6 +341,90 @@ void onBeacon(const MacBeaconFrame& beacon, int8_t rssi, uint8_t lqi) {
   }
 }
 
+#if NIUS_ZIGBEE_SECURE_JOIN
+// Joiner side: an APS Transport-Key arrived (NWK-unsecured, APS-encrypted under
+// the key-transport key). Decrypt it with our link key and install the network
+// key so all later NWK traffic is secured.
+void installNetworkKeyFrom(const uint8_t* blob, uint8_t blobLen) {
+  uint8_t ktk[16];
+  if (!ZigbeeApsSecurity::deriveKeyTransportKey(
+          ZigbeeApsKey::defaultTcLinkKey(), ktk)) {
+    Serial.println("key xport: derive failed");
+    return;
+  }
+  uint8_t plain[40];
+  uint8_t n = ZigbeeApsSecurity::openCommand(blob, blobLen, /*apsHeaderLen=*/1,
+                                             ktk, plain, sizeof(plain));
+  if (n == 0) {
+    Serial.println("key xport: APS decrypt/MIC FAILED");
+    return;
+  }
+  ApsTransportKey t;
+  if (!ZigbeeApsKey::parseTransportNetworkKey(plain, n, t)) {
+    Serial.println("key xport: parse FAILED");
+    return;
+  }
+  security.setNetworkKey(t.key, t.keySeqNumber);
+  keyInstalled = true;
+  Serial.print("secure join: NETWORK KEY installed (seq ");
+  Serial.print(t.keySeqNumber); Serial.println(") - NWK security live");
+}
+
+// Trust Center side: deliver the network key to a freshly-joined device. The
+// Transport-Key command is APS-encrypted under the key-transport key (derived
+// from the default TC link key) and carried in an NWK-unsecured APS data frame,
+// since the joiner cannot yet decrypt the NWK layer. Retried a few times until
+// the joiner confirms by sending a (now secured) Device_annce.
+void serviceKeyTransport() {
+  if (!pendingKeyXport) return;
+  if ((int32_t)(millis() - keyXportAt) < 0) return;
+  if (keyXportTries >= 12) {
+    pendingKeyXport = false;
+    Serial.println("key xport: no confirmation after 12 tries");
+    return;
+  }
+  ++keyXportTries;
+  keyXportAt = millis() + 2000;
+
+  ApsTransportKey t;
+  t.keyType = APS_KEY_STANDARD_NETWORK;
+  memcpy(t.key, NETWORK_KEY, 16);
+  t.keySeqNumber = security.keySequence();
+  t.destAddress = keyXportIeee;
+  t.srcAddress = THIS_IEEE;
+  uint8_t cmd[40];
+  uint8_t cmdLen = ZigbeeApsKey::buildTransportNetworkKey(cmd, sizeof(cmd), t);
+  if (cmdLen == 0) { pendingKeyXport = false; return; }
+
+  uint8_t ktk[16];
+  if (!ZigbeeApsSecurity::deriveKeyTransportKey(ZigbeeApsKey::defaultTcLinkKey(),
+                                                ktk)) {
+    pendingKeyXport = false;
+    return;
+  }
+  const uint8_t apsHeader[1] = {0x21};  // 1-byte AAD prefix (key-transport)
+  uint8_t secured[80];
+  uint8_t securedLen = ZigbeeApsSecurity::secureCommand(
+      apsHeader, sizeof(apsHeader), ktk, APS_SEC_KEY_KEY_TRANSPORT, THIS_IEEE,
+      apsSecCounter++, cmd, cmdLen, secured, sizeof(secured));
+  if (securedLen == 0) { pendingKeyXport = false; return; }
+
+  uint8_t apdu[ZigbeeAps::kMaxFrame];
+  uint8_t apduLen = ZigbeeAps::buildDataFrame(
+      apdu, sizeof(apdu), KEY_XPORT_EP, KEY_XPORT_CLUSTER, APS_PROFILE,
+      KEY_XPORT_EP, apsCounter++, secured, securedLen, /*ackRequest=*/false);
+  if (apduLen == 0) { pendingKeyXport = false; return; }
+
+  bool ok = radio.sendNwkDataUnsecured(
+      network.info().panId, keyXportAddr, network.info().nwkAddress,
+      keyXportAddr, network.info().nwkAddress, apdu, apduLen,
+      ZigbeeNwk::kDefaultRadius, /*ackRequest=*/true);
+  Serial.print("key xport -> 0x"); printHex16(keyXportAddr);
+  Serial.print(" try "); Serial.print(keyXportTries);
+  Serial.println(ok ? " (encrypted netkey)" : " TX-FAIL");
+}
+#endif  // NIUS_ZIGBEE_SECURE_JOIN
+
 void runActiveScan() {
   Serial.println("scanning...");
   network.beginScan(ROLE_END ? ZB_DEVICE_END_DEVICE : ZB_DEVICE_ROUTER);
@@ -309,6 +438,16 @@ void runActiveScan() {
   }
 
   const ZigbeeParentCandidate* parent = network.selectParent();
+#if NIUS_ZIGBEE_SECURE_JOIN
+  // Secure-join demo is 1-hop: only commission directly with the Trust Center
+  // (the coordinator, depth 0). A router cannot deliver the network key here
+  // (that needs an APS tunnel), so refuse it and re-scan.
+  if (parent && parent->depth != 0) {
+    Serial.println("secure join: ignoring non-TC parent, re-scanning");
+    nextActionAt = millis() + 3000;
+    return;
+  }
+#endif
   if (!parent) {
     Serial.print("scan done: ");
     Serial.print(network.candidateCount());
@@ -488,6 +627,14 @@ bool sendApsRouted(uint16_t dst, const uint8_t* apdu, uint8_t apduLen) {
 void onApsData(const MacDataFrame& mac, const NwkDataFrame& nwk,
                const ApsDataFrame& aps, int8_t rssi, uint8_t lqi) {
   (void)rssi; (void)lqi;
+#if NIUS_ZIGBEE_SECURE_JOIN
+  // Joiner: the network key arrives here (NWK-unsecured because we have no key
+  // yet) on the reserved key-transport cluster, APS-encrypted under our link key.
+  if (aps.clusterId == KEY_XPORT_CLUSTER && !IS_COORDINATOR && !keyInstalled) {
+    installNetworkKeyFrom(aps.payload, aps.payloadLen);
+    return;
+  }
+#endif
   if (aps.clusterId != APS_CLUSTER) return;  // leave ZDO etc. alone
 
   // A retransmit that reached us must STILL be acked (the sender lost the
@@ -541,6 +688,9 @@ void serviceRouteDiscovery() {
   // Only the end device originates the demo route to the coordinator. Routers
   // forward/relay but don't originate (keeps the bench output readable).
   if (!ROLE_END || !network.isJoined()) return;
+#if NIUS_ZIGBEE_SECURE_JOIN
+  if (!keyInstalled) return;  // no secured traffic until the network key arrives
+#endif
   routing.expire();
 
   uint16_t target = ZB_NWK_ADDR_COORDINATOR;
@@ -772,6 +922,16 @@ void onZdoFrame(const MacDataFrame& mac, const NwkDataFrame& nwk,
     Serial.print(" ieee=0x"); printHex64(announce.ieeeAddress);
     Serial.print(" src=0x"); printHex16(nwk.srcShort);
     Serial.println();
+#if NIUS_ZIGBEE_SECURE_JOIN
+    // A secured Device_annce from the device we just keyed confirms it
+    // installed the network key (it could not have secured this frame
+    // otherwise): the key transport is complete.
+    if (pendingKeyXport && announce.nwkAddress == keyXportAddr) {
+      pendingKeyXport = false;
+      Serial.print("secure join COMPLETE: 0x"); printHex16(keyXportAddr);
+      Serial.println(" keyed + announced (secured)");
+    }
+#endif
   } else if (aps.clusterId == ZDO_MGMT_LQI_REQ && forUs) {
     replyMgmtLqi(nwk, aps);
   } else if (aps.clusterId == ZDO_MGMT_LQI_RSP && forUs) {
@@ -837,7 +997,13 @@ void setup() {
 
   network.attachNeighborTable(neighbors);
   routing.attachRouteTable(routes);
-  security.setNetworkKey(NETWORK_KEY);
+#if NIUS_ZIGBEE_SECURE_JOIN
+  // Only the Trust Center starts with the network key; a joiner receives it via
+  // the APS Transport-Key after association (see serviceKeyTransport / onApsData).
+  if (IS_COORDINATOR) security.setNetworkKey(NETWORK_KEY);
+#else
+  security.setNetworkKey(NETWORK_KEY);  // pre-shared network key
+#endif
 
   if (!radio.begin(IS_COORDINATOR ? COORD_CHANNEL : SCAN_CHANNELS[0])) {
     Serial.println("CC2530 not found - check wiring/firmware.");
@@ -906,6 +1072,9 @@ void loop() {
   serviceRouteDiscovery();
   sendPendingMgmtLqiRsp();   // answer a recorded Mgmt_Lqi_req while radio idle
   serviceApsRetx();          // retransmit any acked frame whose ACK is overdue
+#if NIUS_ZIGBEE_SECURE_JOIN
+  serviceKeyTransport();     // TC: deliver the network key to a new joiner
+#endif
   if (ROLE_ROUTER && network.isJoined()) becomeParent();
 
   // Persist network state + frame counter periodically so a reboot restores
@@ -966,7 +1135,13 @@ void loop() {
     Serial.println(ok ? ") sent" : ") FAILED");
   }
 
-  if (network.isJoined() && !announced) {
+  if (network.isJoined() && !announced
+#if NIUS_ZIGBEE_SECURE_JOIN
+      // Defer the announce until the network key is installed - otherwise we
+      // could not secure it, and it is the TC's confirmation of the key transfer.
+      && keyInstalled
+#endif
+  ) {
     announced = true;
     delay(80);
     sendDeviceAnnounce();

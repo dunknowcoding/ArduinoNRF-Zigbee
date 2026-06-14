@@ -408,6 +408,23 @@ bool CC2530Radio::sendNwkData(uint16_t panId, uint16_t macDstShort,
   return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
 }
 
+bool CC2530Radio::sendNwkDataUnsecured(uint16_t panId, uint16_t macDstShort,
+                                       uint16_t macSrcShort,
+                                       uint16_t nwkDstShort,
+                                       uint16_t nwkSrcShort,
+                                       const uint8_t* payload, uint8_t len,
+                                       uint8_t radius, bool ackRequest) {
+  // Deliberately skips applyTxSecurity(): the frame carries the network key
+  // (APS-protected under the link key) to a device that cannot yet decrypt the
+  // NWK layer, so the NWK security bit stays clear.
+  uint8_t npdu[ZigbeeNwk::kMaxFrame];
+  uint8_t npduLen = ZigbeeNwk::buildDataFrame(
+      npdu, sizeof(npdu), nwkDstShort, nwkSrcShort, radius, nwkSequence_++,
+      payload, len);
+  if (npduLen == 0) return false;
+  return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
+}
+
 bool CC2530Radio::sendNwkCommand(uint16_t panId, uint16_t macDstShort,
                                  uint16_t macSrcShort, uint16_t nwkDstShort,
                                  uint16_t nwkSrcShort, uint8_t commandId,

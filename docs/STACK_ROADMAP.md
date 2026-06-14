@@ -217,10 +217,20 @@ while preserving the existing raw send / receive / sniffer APIs.
    self-tests it 25/25 on hardware: MMO cross-checked against the raw AES block,
    specialized keys distinct + key-dependent, a full Transport-Key wrap under
    the default TC link key round-trips and parses, and tampered
-   ciphertext/AAD/wrong-key are all MIC-rejected. What remains: drive the
-   envelope from the actual join sequence (TC sends the encrypted Transport-Key
-   when a device associates; joiner decrypts with its link key) and key
-   rotation via keySeq + Switch-Key. Frame-counter persistence is DONE (item 5).
+   ciphertext/AAD/wrong-key are all MIC-rejected. The join-time handshake is
+   wired into CC2530_BeaconJoin behind `-DNIUS_ZIGBEE_SECURE_JOIN=1`: the joiner
+   starts with ONLY the link key, the TC sends the encrypted Transport-Key (via
+   `radio.sendNwkDataUnsecured`, since the joiner has no network key yet) after
+   association, and confirms on the joiner's first secured Device_annce.
+   HW status: the frame is delivered end-to-end and reaches the joiner's APS
+   handler with the right cluster/endpoint/length (NWK rx -> APS rx cl=0x0009
+   len=53), but the APS CCM* MIC fails to verify ON AIR even though the
+   identical secureCommand->openCommand passes 25/25 in isolation and a same-size
+   NWK-*secured* frame (the Mgmt_Lqi rsp) delivers at 100%. The differentiator is
+   the NWK-*unsecured* large-frame path through the clone CC2530's UART; root
+   cause not yet isolated (suspected clone framing of the larger unsecured frame).
+   Remaining: crack the on-air MIC, then key rotation via keySeq + Switch-Key.
+   Frame-counter persistence is DONE (item 5).
 2. **Broadcast Transaction Table** - DONE (data structure + self-test).
    `ZigbeeBroadcastTable` tracks each broadcast transaction = (NWK source,
    sequence number): `recordIncoming` returns NEW (process + rebroadcast once)

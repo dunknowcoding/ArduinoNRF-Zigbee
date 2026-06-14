@@ -178,6 +178,18 @@ class CC2530Radio {
                    uint8_t radius = ZigbeeNwk::kDefaultRadius,
                    bool ackRequest = false);
 
+  /** Transmit a NWK data frame WITHOUT NWK-layer security (security bit clear),
+      regardless of any attached key. Used to deliver the network key to a
+      joiner that does not have it yet: the payload is protected at the APS
+      layer (ZigbeeApsSecurity) under the link key instead. A receiver that has
+      no network key passes such a frame straight through to its callbacks. */
+  bool sendNwkDataUnsecured(uint16_t panId, uint16_t macDstShort,
+                            uint16_t macSrcShort, uint16_t nwkDstShort,
+                            uint16_t nwkSrcShort, const uint8_t* payload,
+                            uint8_t len,
+                            uint8_t radius = ZigbeeNwk::kDefaultRadius,
+                            bool ackRequest = false);
+
   /** Transmit a Zigbee NWK command frame inside a short-address MAC frame. */
   bool sendNwkCommand(uint16_t panId, uint16_t macDstShort,
                       uint16_t macSrcShort, uint16_t nwkDstShort,
