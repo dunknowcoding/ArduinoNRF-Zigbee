@@ -356,3 +356,16 @@ while preserving the existing raw send / receive / sniffer APIs.
    ignore list so three co-located radios still form a 2-hop topology.
    Coordinator+router (A-B) is hardware-verified; the full A-B-C run with a
    third board+module is the remaining verification.
+9. **Many-to-one / source routing** - frames + concentrator table DONE.
+   `ZigbeeNwk::buildRouteRequestPayload(..., manyToOne=true)` builds the
+   many-to-one route request a concentrator floods, and the Route Record
+   command (NWK 0x05, `buildRouteRecordPayload` / `parseRouteRecordPayload` /
+   `getRouteRecordRelay`) carries the relay path a device accumulates back to
+   the concentrator. `ZigbeeSourceRouteTable` stores those paths concentrator-
+   side: `install` from a received Route Record (travel order device ->
+   concentrator), `downstreamRoute` returns the reversed path (concentrator ->
+   device) for the NWK source-route subframe, plus refresh/expire/recycle.
+   `CC2530_SourceRouting` self-tests it 22/22 on hardware. What remains: install
+   the cheap many-to-one route on hearing the MTORR, originate Route Records,
+   and build + forward along the NWK source-route subframe (a NWK header
+   extension the current data-frame builder does not emit yet).

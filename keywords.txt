@@ -43,6 +43,8 @@ ZigbeeBroadcastTable	KEYWORD1
 ZigbeeIndirectQueue	KEYWORD1
 ZigbeeEndDeviceTimeout	KEYWORD1
 ZigbeePanIdConflict	KEYWORD1
+ZigbeeSourceRouteTable	KEYWORD1
+SourceRouteEntry	KEYWORD1
 ApsTransportKey	KEYWORD1
 NwkEdTimeoutRequest	KEYWORD1
 NwkEdTimeoutResponse	KEYWORD1
