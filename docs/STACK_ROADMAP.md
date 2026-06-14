@@ -221,9 +221,18 @@ while preserving the existing raw send / receive / sniffer APIs.
    envelope from the actual join sequence (TC sends the encrypted Transport-Key
    when a device associates; joiner decrypts with its link key) and key
    rotation via keySeq + Switch-Key. Frame-counter persistence is DONE (item 5).
-2. **Broadcast Transaction Table** - broadcast dedup/passive ack. Required
-   for correct multi-hop RREQ/broadcast behavior (the current discovery
-   table only dedups route requests).
+2. **Broadcast Transaction Table** - DONE (data structure + self-test).
+   `ZigbeeBroadcastTable` tracks each broadcast transaction = (NWK source,
+   sequence number): `recordIncoming` returns NEW (process + rebroadcast once)
+   vs DUPLICATE (count as a passive ack, do not reprocess); `recordOutgoing`
+   tracks our own floods; `markPassiveAck` records a neighbor's rebroadcast;
+   `due(neededAcks, retryMs, maxRetries)` returns the next transaction needing
+   a retry (window elapsed, retries left, too few passive acks); `expire`
+   reclaims entries after nwkNetworkBroadcastDeliveryTime (~9 s); the table
+   recycles the oldest slot when full. `CC2530_BroadcastTable` self-tests it
+   22/22 on hardware (dedup, passive-ack suppression, retry cap, expiry +
+   recycle). What remains: wire it into the example's broadcast RX/TX path
+   (RREQ, Link Status, Device_annce) so relays dedup + passively-ack on air.
 3. **Indirect transmission / sleepy end devices** - a parent-side pending
    queue plus MAC Data Request handling so rx-off children can poll.
    Needs CC2530 firmware support for the pending bit in acks (or host

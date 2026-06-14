@@ -24,6 +24,7 @@
 #include "ZigbeeApsFragment.h"
 #include "ZigbeeApsKey.h"
 #include "ZigbeeApsSecurity.h"
+#include "ZigbeeBroadcastTable.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -94,6 +95,8 @@ using nzb::ZDO_UNBIND_RSP;
 using nzb::ZigbeeApsFragment;
 using nzb::ApsFragmentInfo;
 using nzb::ZigbeeApsReassembler;
+using nzb::ZigbeeBroadcastTable;
+using nzb::BroadcastEntry;
 using nzb::ZigbeeApsKey;
 using nzb::ZigbeeApsSecurity;
 using nzb::ApsSecurityKeyId;
