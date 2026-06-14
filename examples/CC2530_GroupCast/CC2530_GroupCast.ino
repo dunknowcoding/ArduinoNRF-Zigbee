@@ -102,6 +102,56 @@ void testReceiverDecision() {
   check(!groups.isMember(f.groupAddress), "frame to other group 0x1234 ignored");
 }
 
+void testGroupsCluster() {
+  Serial.println("ZCL Groups cluster (server behavior):");
+  uint16_t storage[4];
+  ZigbeeGroupTable table(storage, 4);
+  uint8_t resp[24];
+  uint8_t respCmd = 0xFF;
+
+  // Add Group 0x0007.
+  uint8_t cmd[8];
+  uint8_t cn = ZigbeeGroupsCluster::buildAddGroup(cmd, sizeof(cmd), 0x0007);
+  uint8_t rn = ZigbeeGroupsCluster::handle(table, GROUPS_CMD_ADD, cmd, cn,
+                                           respCmd, resp, sizeof(resp));
+  check(table.isMember(0x0007), "Add Group joined the table");
+  check(respCmd == GROUPS_CMD_ADD && rn == 3 && resp[0] == GROUPS_STATUS_SUCCESS,
+        "Add Group Response = SUCCESS + group id");
+
+  // Adding the same group again -> DUPLICATE_EXISTS.
+  ZigbeeGroupsCluster::handle(table, GROUPS_CMD_ADD, cmd, cn, respCmd, resp,
+                              sizeof(resp));
+  check(resp[0] == GROUPS_STATUS_DUPLICATE_EXISTS, "duplicate Add -> DUPLICATE");
+
+  // Get Group Membership (count 0 = all): we belong to 0x0007.
+  ZigbeeGroupsCluster::buildAddGroup(cmd, sizeof(cmd), 0x0008);
+  ZigbeeGroupsCluster::handle(table, GROUPS_CMD_ADD, cmd, 3, respCmd, resp,
+                              sizeof(resp));  // also join 0x0008
+  uint8_t getCmd[1] = {0};
+  rn = ZigbeeGroupsCluster::handle(table, GROUPS_CMD_GET_MEMBERSHIP, getCmd, 1,
+                                   respCmd, resp, sizeof(resp));
+  check(respCmd == GROUPS_CMD_GET_MEMBERSHIP && resp[1] == 2,
+        "Get Membership response lists 2 groups");
+  check(resp[0] == 4 - 2, "membership response capacity = free slots");
+
+  // Remove a member, then a non-member.
+  uint8_t idCmd[2];
+  ZigbeeGroupsCluster::buildGroupId(idCmd, sizeof(idCmd), 0x0007);
+  ZigbeeGroupsCluster::handle(table, GROUPS_CMD_REMOVE, idCmd, 2, respCmd, resp,
+                              sizeof(resp));
+  check(!table.isMember(0x0007) && resp[0] == GROUPS_STATUS_SUCCESS,
+        "Remove Group left the table, status SUCCESS");
+  ZigbeeGroupsCluster::buildGroupId(idCmd, sizeof(idCmd), 0x00AA);
+  ZigbeeGroupsCluster::handle(table, GROUPS_CMD_REMOVE, idCmd, 2, respCmd, resp,
+                              sizeof(resp));
+  check(resp[0] == GROUPS_STATUS_NOT_FOUND, "Remove non-member -> NOT_FOUND");
+
+  // Remove All Groups -> table cleared, no response.
+  rn = ZigbeeGroupsCluster::handle(table, GROUPS_CMD_REMOVE_ALL, nullptr, 0,
+                                   respCmd, resp, sizeof(resp));
+  check(rn == 0 && table.count() == 0, "Remove All cleared the table (no response)");
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial && millis() < 3000) {}
@@ -110,6 +160,7 @@ void setup() {
   testGroupFrame();
   testGroupTable();
   testReceiverDecision();
+  testGroupsCluster();
 
   Serial.print("RESULT: "); Serial.print(passes); Serial.print(" passed, ");
   Serial.print(fails); Serial.println(" failed");

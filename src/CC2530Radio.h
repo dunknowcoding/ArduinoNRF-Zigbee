@@ -31,6 +31,7 @@
 #include "ZigbeeSourceRouteTable.h"
 #include "ZigbeeInstallCode.h"
 #include "ZigbeeGroupTable.h"
+#include "ZigbeeGroupsCluster.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -125,6 +126,14 @@ using nzb::SourceRouteEntry;
 using nzb::NWK_CMD_ROUTE_RECORD;
 using nzb::ZigbeeInstallCode;
 using nzb::ZigbeeGroupTable;
+using nzb::ZigbeeGroupsCluster;
+using nzb::GROUPS_CMD_ADD;
+using nzb::GROUPS_CMD_REMOVE;
+using nzb::GROUPS_CMD_REMOVE_ALL;
+using nzb::GROUPS_CMD_GET_MEMBERSHIP;
+using nzb::GROUPS_STATUS_SUCCESS;
+using nzb::GROUPS_STATUS_DUPLICATE_EXISTS;
+using nzb::GROUPS_STATUS_NOT_FOUND;
 using nzb::APS_DELIVERY_UNICAST;
 using nzb::APS_DELIVERY_GROUP;
 using nzb::NWK_REPORT_PAN_ID_CONFLICT;

@@ -391,7 +391,11 @@ while preserving the existing raw send / receive / sniffer APIs.
     unchanged). `ZigbeeGroupTable` is the device's group membership store
     (join/leave/isMember/enumerate); the receive path delivers a group frame to
     the app only if `isMember(groupAddress)`. `CC2530_GroupCast` self-tests it
-    23/23 on hardware (group frame round-trip, unicast regression, membership,
-    accept/ignore by membership). What remains: send group frames as a NWK
-    broadcast to 0xFFFD on air, and the ZCL Groups cluster (Add/Remove/View
-    Group) to drive membership remotely.
+    31/31 on hardware (group frame round-trip, unicast regression, membership,
+    accept/ignore by membership). The ZCL Groups cluster (0x0004) is included:
+    `ZigbeeGroupsCluster` builds the Add/Remove/Get-Membership command +
+    response payloads and `handle()` applies an incoming command to the group
+    table and produces the response (SUCCESS / DUPLICATE_EXISTS / NOT_FOUND /
+    INSUFFICIENT_SPACE), so a coordinator can drive membership remotely. What
+    remains: send group frames as a NWK broadcast to 0xFFFD on air (wire into
+    the example).

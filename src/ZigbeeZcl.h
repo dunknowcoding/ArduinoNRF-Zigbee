@@ -79,6 +79,7 @@ class ZigbeeZcl {
   static const uint8_t kMaxFrame = 100;
   static const uint8_t kMaxPayload = kMaxFrame - kBaseHeaderLen;
   static const uint16_t kClusterBasic = 0x0000;
+  static const uint16_t kClusterGroups = 0x0004;
   static const uint16_t kClusterOnOff = 0x0006;
   static const uint16_t kClusterLevelControl = 0x0008;
   static const uint16_t kAttrOnOff = 0x0000;
