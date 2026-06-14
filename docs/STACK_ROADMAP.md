@@ -402,3 +402,11 @@ while preserving the existing raw send / receive / sniffer APIs.
     APS frame inside a NWK-secured broadcast to 0xFFFD) every 8 s, and a member
     end device parses it (`mic=0`) and toggles its built-in LED - verified as
     alternating `LED=ON/OFF` on the bench. Group addressing is complete.
+12. **ZCL cluster library** - growing. Reusable cluster helpers: Basic + On/Off
+    (`ZigbeeBasicCluster` / `ZigbeeOnOffCluster`), boolean reporting
+    (`ZigbeeBoolReportScheduler`), Groups (`ZigbeeGroupsCluster`, item 11), and
+    Level Control (`ZigbeeLevelControlCluster`, the dimming half of a dimmable
+    light: Move to Level / Move / Step / Stop command payloads + apply-to-level
+    behavior with 0..254 clamping). `CC2530_LevelControl` self-tests it 10/10 on
+    hardware. What remains for a full ZCL library: Identify, Scenes, Color
+    Control, and the other Home Automation clusters.

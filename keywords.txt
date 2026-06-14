@@ -48,6 +48,7 @@ SourceRouteEntry	KEYWORD1
 ZigbeeInstallCode	KEYWORD1
 ZigbeeGroupTable	KEYWORD1
 ZigbeeGroupsCluster	KEYWORD1
+ZigbeeLevelControlCluster	KEYWORD1
 ApsTransportKey	KEYWORD1
 NwkEdTimeoutRequest	KEYWORD1
 NwkEdTimeoutResponse	KEYWORD1

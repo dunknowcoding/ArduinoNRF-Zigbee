@@ -32,6 +32,7 @@
 #include "ZigbeeInstallCode.h"
 #include "ZigbeeGroupTable.h"
 #include "ZigbeeGroupsCluster.h"
+#include "ZigbeeLevelControlCluster.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -127,6 +128,13 @@ using nzb::NWK_CMD_ROUTE_RECORD;
 using nzb::ZigbeeInstallCode;
 using nzb::ZigbeeGroupTable;
 using nzb::ZigbeeGroupsCluster;
+using nzb::ZigbeeLevelControlCluster;
+using nzb::LEVEL_CMD_MOVE_TO_LEVEL;
+using nzb::LEVEL_CMD_STEP;
+using nzb::LEVEL_CMD_MOVE;
+using nzb::LEVEL_CMD_STOP;
+using nzb::LEVEL_DIR_UP;
+using nzb::LEVEL_DIR_DOWN;
 using nzb::GROUPS_CMD_ADD;
 using nzb::GROUPS_CMD_REMOVE;
 using nzb::GROUPS_CMD_REMOVE_ALL;
