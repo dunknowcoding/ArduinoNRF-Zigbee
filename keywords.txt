@@ -60,6 +60,8 @@ ZigbeeIasZoneCluster	KEYWORD1
 ZigbeeOtaCluster	KEYWORD1
 ZigbeeThermostatCluster	KEYWORD1
 ZigbeeWindowCoveringCluster	KEYWORD1
+ZigbeeTouchlink	KEYWORD1
+ZigbeeAes128Decrypt	KEYWORD1
 ZigbeeSceneTable	KEYWORD1
 ApsTransportKey	KEYWORD1
 NwkEdTimeoutRequest	KEYWORD1

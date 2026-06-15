@@ -462,3 +462,20 @@ while preserving the existing raw send / receive / sniffer APIs.
     the active color mode); `CC2530_ColorControl` self-tests it 9/9. What
     remains for a full ZCL library: the other HA clusters (Window Covering,
     Thermostat, ...) and the OTA Upgrade cluster.
+
+13. **Touchlink (ZLL) commissioning** - DONE (frames + key transport + software
+    AES decrypt). Touchlink is Zigbee 3.0 proximity commissioning over inter-PAN:
+    `ZigbeeTouchlink` builds/parses the commissioning-cluster (0x1000) commands
+    (Scan Request/Response, Identify Request, Network Join Router Request) and
+    implements the ZLL network-key transport - transport key =
+    AES-ECB-Encrypt(masterKey, expanded transaction/response id), network key =
+    AES-ECB-Encrypt(transportKey, key) on the initiator, recovered with
+    AES-ECB-Decrypt on the target. Because the nRF ECB peripheral is
+    encrypt-only, `ZigbeeAes128Decrypt` adds a compact FIPS-197 software inverse
+    cipher (verified against the FIPS-197 vector AND cross-checked vs the
+    hardware ECB). `CC2530_Touchlink` self-tests it 13/13 on hardware: AES KAT,
+    command round-trips, and a full encrypt-on-initiator / recover-on-target key
+    transport (wrong transaction id does not recover the key). What remains:
+    wire the commands onto inter-PAN transmission (a stub NWK/APS over a raw MAC
+    frame) and confirm the key-index-4 expanded-input order against a certified
+    ZLL reference vector.

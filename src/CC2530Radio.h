@@ -43,8 +43,19 @@
 #include "ZigbeeThermostatCluster.h"
 #include "ZigbeeWindowCoveringCluster.h"
 #include "ZigbeeLight.h"
+#include "ZigbeeAes128Decrypt.h"
+#include "ZigbeeTouchlink.h"
 
 using nzb::CC2530Radio;
+using nzb::ZigbeeAes128Decrypt;
+using nzb::ZigbeeTouchlink;
+using nzb::ZllScanResponse;
+using nzb::ZllNetworkJoinRequest;
+using nzb::ZLL_CMD_SCAN_REQUEST;
+using nzb::ZLL_CMD_SCAN_RESPONSE;
+using nzb::ZLL_CMD_IDENTIFY_REQUEST;
+using nzb::ZLL_CMD_NETWORK_JOIN_ROUTER_REQUEST;
+using nzb::ZLL_KEY_MASTER;
 using nzb::CC2530MacInfo;
 using nzb::CC2530RxCallback;
 using nzb::CC2530DataCallback;
