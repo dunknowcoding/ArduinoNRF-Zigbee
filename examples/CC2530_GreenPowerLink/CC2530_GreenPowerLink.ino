@@ -24,7 +24,10 @@
 
 CC2530Radio radio;
 
-static const uint8_t CHANNEL = 20;          // isolated from the ch15 demo mesh
+#ifndef GP_CHANNEL
+#define GP_CHANNEL 20                        // 20 = isolated; set 15 to ride the mesh channel
+#endif
+static const uint8_t CHANNEL = GP_CHANNEL;
 static const uint16_t GP_PAN = 0x1A62;
 static const uint32_t GPD_SRC_ID = 0x01234567;
 static const uint8_t GPD_KEY[16] = {0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,

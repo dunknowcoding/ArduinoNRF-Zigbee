@@ -58,6 +58,14 @@
 #endif
 #define MULTI_TOPO (NIUS_ZIGBEE_LINE_TOPO || NIUS_ZIGBEE_MESH_TOPO)
 
+// Green Power sink on the coordinator (-DNIUS_ZIGBEE_GP_SINK=1): in addition to
+// running the mesh, the coordinator listens for raw Green Power Data Frames from
+// a commissioned battery-less GPD and toggles its LED on each Toggle - a GPD
+// controlling the network while the mesh runs (mesh + Green Power coexisting).
+#ifndef NIUS_ZIGBEE_GP_SINK
+#define NIUS_ZIGBEE_GP_SINK 0
+#endif
+
 #if MULTI_TOPO
 #define ROLE_COORD  (NIUS_ZIGBEE_THIS_NODE == 0x0001)
 #define ROLE_ROUTER (NIUS_ZIGBEE_THIS_NODE == 0x0002 || NIUS_ZIGBEE_THIS_NODE == 0x0003)
@@ -1193,6 +1201,37 @@ bool loadState(ZigbeePersistentState& s) {
 #endif
 }
 
+#if NIUS_ZIGBEE_GP_SINK
+// A commissioned Green Power device (the demo GPD broadcasting secured Toggles).
+static const uint32_t GP_SRC_ID = 0x01234567;
+static const uint8_t GP_KEY[16] = {0x00,0x11,0x22,0x33,0x44,0x55,0x66,0x77,
+                                   0x88,0x99,0xAA,0xBB,0xCC,0xDD,0xEE,0xFF};
+GpSinkEntry gpSinkStorage[2];
+ZigbeeGpSinkTable gpSink;
+uint8_t gpLedOn = 0;
+
+// Raw MAC callback: a broadcast Green Power Data Frame from our commissioned GPD
+// is decrypted, replay-checked, and toggles the coordinator's LED. Non-GP frames
+// (the mesh traffic) fall through and are handled by the NWK/APS callbacks.
+void onMacGp(const MacDataFrame& f, int8_t rssi, uint8_t lqi) {
+  (void)rssi; (void)lqi;
+  GpdfFrame g;
+  if (!ZigbeeGreenPower::parse(f.payload, f.payloadLen, g)) return;  // not a GPDF
+  GpSinkEntry* e = gpSink.find(g.srcId);
+  if (!e) return;
+  GpdfFrame dec;
+  if (!ZigbeeGreenPower::open(f.payload, f.payloadLen, e->key, dec)) return;
+  if (!gpSink.checkAndUpdateCounter(dec.srcId, dec.frameCounter)) return;
+  if (dec.commandId == GPD_CMD_TOGGLE) gpLedOn ^= 1;
+  else if (dec.commandId == GPD_CMD_ON) gpLedOn = 1;
+  else if (dec.commandId == GPD_CMD_OFF) gpLedOn = 0;
+  digitalWrite(LED_BUILTIN, gpLedOn ? HIGH : LOW);
+  Serial.print("GP sink: cmd 0x"); printHex8(dec.commandId);
+  Serial.print(" fc="); Serial.print(dec.frameCounter);
+  Serial.print(" -> LED="); Serial.println(gpLedOn ? "ON" : "OFF");
+}
+#endif
+
 void setup() {
   Serial.begin(115200);
   uint32_t t0 = millis();
@@ -1225,6 +1264,17 @@ void setup() {
   radio.attachSecurity(security, THIS_IEEE);
   apsRetx.begin(apsPendingStorage, 4);
   apsDupe.begin(apsDupeStorage, 6);
+
+#if NIUS_ZIGBEE_GP_SINK
+  if (IS_COORDINATOR) {
+    pinMode(LED_BUILTIN, OUTPUT);
+    digitalWrite(LED_BUILTIN, LOW);
+    gpSink.begin(gpSinkStorage, 2);
+    gpSink.commission(GP_SRC_ID, /*deviceId=*/0x02, GP_KEY);
+    radio.onDataReceive(onMacGp);  // also see raw MAC frames (Green Power)
+    Serial.print("GP sink: commissioned GPD 0x"); Serial.println(GP_SRC_ID, HEX);
+  }
+#endif
 
 #if NIUS_ZIGBEE_GROUPCAST
   pinMode(LED_BUILTIN, OUTPUT);
