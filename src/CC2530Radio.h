@@ -38,6 +38,8 @@
 #include "ZigbeeColorControlCluster.h"
 #include "ZigbeeZdoMgmt.h"
 #include "ZigbeeFindingBinding.h"
+#include "ZigbeeIasZoneCluster.h"
+#include "ZigbeeLight.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -214,6 +216,12 @@ using nzb::ZDO_MGMT_LQI_RSP;
 using nzb::ZigbeeZdoMgmt;
 using nzb::ZdoNodeDescriptor;
 using nzb::ZigbeeFindingBinding;
+using nzb::ZigbeeLight;
+using nzb::ZigbeeIasZoneCluster;
+using nzb::IAS_STATUS_ALARM1;
+using nzb::IAS_STATUS_TAMPER;
+using nzb::IAS_ZONE_TYPE_CONTACT;
+using nzb::IAS_ENROLL_SUCCESS;
 using nzb::ZDO_TYPE_COORDINATOR;
 using nzb::ZDO_TYPE_ROUTER;
 using nzb::ZDO_TYPE_END_DEVICE;
@@ -257,6 +265,11 @@ using nzb::ZigbeeParentCandidate;
 using nzb::ZB_NWK_STATE_IDLE;
 using nzb::ZB_NWK_STATE_SCANNING;
 using nzb::ZigbeeZcl;
+using nzb::ZCL_ON_OFF_CMD_OFF;
+using nzb::ZCL_ON_OFF_CMD_ON;
+using nzb::ZCL_ON_OFF_CMD_TOGGLE;
+using nzb::ZCL_FRAME_PROFILE_WIDE;
+using nzb::ZCL_FRAME_CLUSTER_SPECIFIC;
 using nzb::ZigbeeOnOffCluster;
 using nzb::ZigbeeBasicCluster;
 using nzb::ZigbeeBoolReportScheduler;

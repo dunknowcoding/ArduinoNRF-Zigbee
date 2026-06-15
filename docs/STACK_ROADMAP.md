@@ -201,6 +201,27 @@ while preserving the existing raw send / receive / sniffer APIs.
 
 ## Remaining gaps toward Zigbee PRO (priority order)
 
+> **M1-M6 completion batch (release 0.4.0).** A planned sweep closed most of the
+> remaining gaps, each with a hardware self-test:
+> - **M1 ZDO network management** - `ZigbeeZdoMgmt`: Mgmt_Permit_Joining,
+>   Mgmt_Leave, Node_Desc (9/9).
+> - **M2 APS fragmentation send path** - `ZigbeeApsFragmenter` iterates a long
+>   payload into fragments; reassembles end to end (10/10).
+> - **M3 Key rotation** - `ZigbeeSecurity` dual-key by sequence + `switchKey()`;
+>   APS app-data encryption via `ZigbeeApsSecurity` (10/10, single-key
+>   regression preserved).
+> - **M4 Source-routing completion** - `nwkHeaderLength` handles the
+>   source-route subframe; concentrator originates from Route Records (38/38).
+> - **M5 BDB Finding & Binding** - `ZigbeeFindingBinding` matches client/server
+>   clusters and creates the bindings (9/9).
+> - **M6 Device abstraction** - `ZigbeeLight` ties On/Off + Level + Color +
+>   Identify + Groups + Scenes into one device; `ZigbeeIasZoneCluster` sensor
+>   (14/14).
+> Remaining beyond this batch: fully-secured multi-hop source routing (mutable
+> relay index excluded from the CCM* AAD), OTA Upgrade cluster, and more HA
+> clusters; plus multi-board OTA verification of source routing on a stable
+> 2-hop bench.
+
 1. **Key transport** - command frames DONE; APS-layer encryption envelope
    DONE + HW-verified; join-time handshake remains. `ZigbeeApsKey` builds/parses
    the APS key commands - Transport-Key (network key, 35 B), Request-Key
