@@ -189,6 +189,47 @@ void testForwarding() {
   check(a == NWK_SR_DROP, "off-path node drops the frame");
 }
 
+void testOrigination() {
+  Serial.println("Concentrator origination (Route Record -> originate -> relay):");
+  SourceRouteEntry storage[2];
+  ZigbeeSourceRouteTable srt(storage, 2);
+
+  // Device 0x0031's Route Record arrives at the concentrator with the relay
+  // path in travel order device -> concentrator: 0x0005 then 0x0002.
+  const uint16_t travel[2] = {0x0005, 0x0002};
+  uint8_t rr[16];
+  uint8_t rrn = ZigbeeNwk::buildRouteRecordPayload(rr, sizeof(rr), travel, 2);
+  NwkRouteRecordCommand rec;
+  ZigbeeNwk::parseRouteRecordPayload(rr, rrn, rec);
+  uint16_t relays[8];
+  uint8_t rc = 0;
+  for (uint8_t i = 0; i < rec.relayCount && i < 8; ++i)
+    ZigbeeNwk::getRouteRecordRelay(rec, i, relays[i]), ++rc;
+  check(srt.install(0x0031, relays, rc, 1000), "store the device's Route Record");
+
+  // The concentrator builds a downstream source route (reversed): 0x0002 ->
+  // 0x0005 -> device.
+  uint16_t ds[8];
+  uint8_t dn = srt.downstreamRoute(0x0031, ds, 8);
+  check(dn == 2 && ds[0] == 0x0002 && ds[1] == 0x0005, "downstream route reversed");
+
+  // ...and originates a source-routed data frame from it (relay index 0).
+  uint8_t npdu[40];
+  uint8_t n = ZigbeeNwk::buildDataFrameSourceRouted(npdu, sizeof(npdu), 0x0031,
+                                                    0x0000, 30, 5, ds, dn, 0,
+                                                    (const uint8_t*)"go", 2);
+  NwkDataFrame f;
+  check(n > 0 && ZigbeeNwk::parseDataFrame(npdu, n, f) && f.sourceRoute &&
+            f.dstShort == 0x0031 && f.srRelayCount == 2 && f.srRelayIndex == 0,
+        "originated source-routed frame to the device");
+
+  // The first relay (0x0002) forwards it on toward 0x0005.
+  uint16_t nextHop = 0; uint8_t outIdx = 0;
+  uint8_t act = ZigbeeNwk::sourceRouteAction(f, 0x0002, nextHop, outIdx);
+  check(act == NWK_SR_RELAY && nextHop == 0x0005,
+        "first relay forwards toward the next relay");
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial && millis() < 3000) {}
@@ -199,6 +240,7 @@ void setup() {
   testSourceRouteTable();
   testSourceRoutedFrame();
   testForwarding();
+  testOrigination();
 
   Serial.print("RESULT: "); Serial.print(passes); Serial.print(" passed, ");
   Serial.print(fails); Serial.println(" failed");

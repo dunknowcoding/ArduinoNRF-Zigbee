@@ -372,9 +372,13 @@ uint8_t CC2530Radio::nwkHeaderLength(const uint8_t* npdu, uint8_t len) {
   if (!npdu || len < 8) return 8;
   uint16_t fcf = (uint16_t)npdu[0] | ((uint16_t)npdu[1] << 8);
   uint8_t headerLen = 8;
-  if (fcf & (1u << 8)) headerLen += 1;   // multicast control
   if (fcf & (1u << 11)) headerLen += 8;  // destination IEEE
   if (fcf & (1u << 12)) headerLen += 8;  // source IEEE
+  if (fcf & (1u << 8)) headerLen += 1;   // multicast control
+  if (fcf & (1u << 10)) {                // source-route subframe
+    // relay count(1) + relay index(1) + relay list(2 * count).
+    if (len > headerLen) headerLen += (uint8_t)(2 + npdu[headerLen] * 2);
+  }
   return headerLen;
 }
 
