@@ -51,6 +51,7 @@ ZigbeeGroupsCluster	KEYWORD1
 ZigbeeLevelControlCluster	KEYWORD1
 ZigbeeIdentifyCluster	KEYWORD1
 ZigbeeScenesCluster	KEYWORD1
+ZigbeeColorControlCluster	KEYWORD1
 ZigbeeSceneTable	KEYWORD1
 ApsTransportKey	KEYWORD1
 NwkEdTimeoutRequest	KEYWORD1

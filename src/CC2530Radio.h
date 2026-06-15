@@ -35,6 +35,7 @@
 #include "ZigbeeLevelControlCluster.h"
 #include "ZigbeeIdentifyCluster.h"
 #include "ZigbeeScenesCluster.h"
+#include "ZigbeeColorControlCluster.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -155,6 +156,14 @@ using nzb::SCENES_CMD_REMOVE_ALL;
 using nzb::SCENES_STATUS_SUCCESS;
 using nzb::SCENES_STATUS_NOT_FOUND;
 using nzb::SCENES_STATUS_INSUFFICIENT_SPACE;
+using nzb::ZigbeeColorControlCluster;
+using nzb::ColorState;
+using nzb::COLOR_CMD_MOVE_TO_HUE_AND_SATURATION;
+using nzb::COLOR_CMD_MOVE_TO_COLOR;
+using nzb::COLOR_CMD_MOVE_TO_COLOR_TEMPERATURE;
+using nzb::COLOR_MODE_HUE_SAT;
+using nzb::COLOR_MODE_XY;
+using nzb::COLOR_MODE_TEMPERATURE;
 using nzb::GROUPS_CMD_ADD;
 using nzb::GROUPS_CMD_REMOVE;
 using nzb::GROUPS_CMD_REMOVE_ALL;

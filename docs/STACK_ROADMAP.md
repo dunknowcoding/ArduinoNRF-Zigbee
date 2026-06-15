@@ -425,5 +425,10 @@ while preserving the existing raw send / receive / sniffer APIs.
     (On/Off + Level) per (group, scene) and handles Store / Recall / Remove /
     Remove-All (Store captures the current state, Recall writes it back);
     `CC2530_Scenes` self-tests it 17/17. The reusable cluster set is now Basic,
-    Identify, Groups, On/Off, Level Control, Scenes + boolean reporting. What
-    remains for a full ZCL library: Color Control and the other HA clusters.
+    Identify, Groups, On/Off, Level Control, Scenes + boolean reporting. Color
+    Control (`ZigbeeColorControlCluster`, 0x0300) completes the color-bulb triad:
+    Move to Hue and Saturation / Move to Color (CIE xy) / Move to Color
+    Temperature command payloads + apply-to-`ColorState` (hue/sat/x/y/mireds +
+    the active color mode); `CC2530_ColorControl` self-tests it 9/9. What
+    remains for a full ZCL library: the other HA clusters (Window Covering,
+    Thermostat, ...) and the OTA Upgrade cluster.
