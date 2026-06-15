@@ -25,6 +25,7 @@ ZigbeeOnOffCluster	KEYWORD1
 ZigbeeBasicCluster	KEYWORD1
 ZigbeeBoolReportScheduler	KEYWORD1
 ZigbeeZdo	KEYWORD1
+ZigbeeZdoMgmt	KEYWORD1
 ZigbeeSecurity	KEYWORD1
 ZigbeeRouting	KEYWORD1
 ZigbeeNetwork	KEYWORD1

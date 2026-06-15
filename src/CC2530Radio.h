@@ -36,6 +36,7 @@
 #include "ZigbeeIdentifyCluster.h"
 #include "ZigbeeScenesCluster.h"
 #include "ZigbeeColorControlCluster.h"
+#include "ZigbeeZdoMgmt.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -208,6 +209,17 @@ using nzb::ZdoRoutingListEntry;
 using nzb::ZdoMgmtRtgResponse;
 using nzb::ZDO_MGMT_LQI_REQ;
 using nzb::ZDO_MGMT_LQI_RSP;
+using nzb::ZigbeeZdoMgmt;
+using nzb::ZdoNodeDescriptor;
+using nzb::ZDO_TYPE_COORDINATOR;
+using nzb::ZDO_TYPE_ROUTER;
+using nzb::ZDO_TYPE_END_DEVICE;
+using nzb::ZDO_MGMT_LEAVE_REQ;
+using nzb::ZDO_MGMT_LEAVE_RSP;
+using nzb::ZDO_MGMT_PERMIT_JOINING_REQ;
+using nzb::ZDO_MGMT_PERMIT_JOINING_RSP;
+using nzb::ZDO_NODE_DESC_REQ;
+using nzb::ZDO_NODE_DESC_RSP;
 using nzb::ZDO_MGMT_RTG_REQ;
 using nzb::ZDO_MGMT_RTG_RSP;
 using nzb::ZDO_STATUS_SUCCESS;
