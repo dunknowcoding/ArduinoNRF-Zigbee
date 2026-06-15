@@ -1,0 +1,159 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="710" viewBox="0 0 920 710" font-family="'Segoe UI',Helvetica,Arial,sans-serif">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0d1b2a"/>
+      <stop offset="1" stop-color="#1b263b"/>
+    </linearGradient>
+    <linearGradient id="pcb" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1f7a3d"/>
+      <stop offset="1" stop-color="#11532a"/>
+    </linearGradient>
+    <linearGradient id="cc" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2b5dab"/>
+      <stop offset="1" stop-color="#1c3f78"/>
+    </linearGradient>
+    <radialGradient id="coordGlow" cx="0.5" cy="0.5" r="0.5">
+      <stop offset="0" stop-color="#ffd45e" stop-opacity="0.55"/>
+      <stop offset="1" stop-color="#ffd45e" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="sh" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="3" stdDeviation="4" flood-color="#000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <rect width="920" height="710" fill="url(#bg)"/>
+  <text x="460" y="42" text-anchor="middle" font-size="26" font-weight="700" fill="#e8eef7">NiusZigbee mesh — verified on air</text>
+  <text x="460" y="68" text-anchor="middle" font-size="15" fill="#9fb3c8">nRF52840 (ArduinoNRF) host + CC2530 radio per node · AES-CCM* NWK/APS security · multi-hop + route repair</text>
+
+  <!-- ============ wireless links (drawn under the nodes) ============ -->
+  <g stroke-linecap="round" fill="none">
+    <!-- backbone coordinator<->routers -->
+    <path d="M 460 250 L 250 360" stroke="#7fe1a8" stroke-width="4"/>
+    <path d="M 460 250 L 670 360" stroke="#7fe1a8" stroke-width="4"/>
+    <!-- redundant router cross-link (mesh) -->
+    <path d="M 330 400 L 590 400" stroke="#7fe1a8" stroke-width="3" stroke-dasharray="2 8"/>
+    <!-- router -> end device -->
+    <path d="M 250 470 L 250 540" stroke="#7fe1a8" stroke-width="4"/>
+    <path d="M 670 470 L 670 540" stroke="#9d8cff" stroke-width="4"/>
+    <!-- route-repair failover path (board4 -> board3) -->
+    <path d="M 320 560 Q 500 600 640 470" stroke="#ff9e6d" stroke-width="3" stroke-dasharray="9 7"/>
+  </g>
+
+  <!-- link captions -->
+  <text x="333" y="300" text-anchor="middle" font-size="12" fill="#7fe1a8" transform="rotate(-28 333 300)">NWK + APS acked</text>
+  <text x="587" y="300" text-anchor="middle" font-size="12" fill="#7fe1a8" transform="rotate(28 587 300)">NWK + APS acked</text>
+  <text x="460" y="392" text-anchor="middle" font-size="12" fill="#8fd6ad">redundant mesh link</text>
+  <text x="455" y="612" text-anchor="middle" font-size="12" fill="#ff9e6d">route repair (failover)</text>
+  <text x="712" y="508" text-anchor="start" font-size="12" fill="#b3a6ff">Green Power</text>
+
+  <!-- ===================== NODE TEMPLATE via groups ===================== -->
+  <!-- board1 : Coordinator -->
+  <g transform="translate(385,160)">
+    <circle cx="45" cy="45" r="95" fill="url(#coordGlow)"/>
+    <g filter="url(#sh)">
+      <rect x="0" y="0" width="150" height="90" rx="10" fill="url(#pcb)" stroke="#0a3d1f" stroke-width="1.5"/>
+      <rect x="14" y="30" width="46" height="40" rx="4" fill="#11161c" stroke="#3a4754"/>
+      <text x="37" y="54" text-anchor="middle" font-size="9" fill="#cdd7e2">nRF</text>
+      <text x="37" y="64" text-anchor="middle" font-size="9" fill="#cdd7e2">52840</text>
+      <rect x="74" y="24" width="58" height="52" rx="4" fill="url(#cc)" stroke="#13284a"/>
+      <text x="103" y="46" text-anchor="middle" font-size="9" fill="#dce6f5">CC2530</text>
+      <text x="103" y="58" text-anchor="middle" font-size="8" fill="#a9c2e6">radio</text>
+      <!-- chip antenna -->
+      <path d="M132 24 l8 -8 l-6 -2 l8 -8" fill="none" stroke="#dce6f5" stroke-width="2"/>
+      <path d="M150 6 a10 10 0 0 1 8 8 M150 0 a18 18 0 0 1 14 14" fill="none" stroke="#7fe1a8" stroke-width="1.6" opacity="0.8"/>
+      <!-- USB notch -->
+      <rect x="58" y="84" width="34" height="9" rx="2" fill="#9aa7b4"/>
+      <!-- role badge -->
+      <circle cx="0" cy="0" r="17" fill="#ffce46" stroke="#7a5a00" stroke-width="2"/>
+      <text x="0" y="5" text-anchor="middle" font-size="16" font-weight="700" fill="#5a3d00">C</text>
+    </g>
+    <text x="75" y="112" text-anchor="middle" font-size="15" font-weight="700" fill="#ffe08a">board1</text>
+    <text x="75" y="129" text-anchor="middle" font-size="12" fill="#9fb3c8">Coordinator / Trust Center</text>
+  </g>
+
+  <!-- board2 : Router -->
+  <g transform="translate(175,380)">
+    <g filter="url(#sh)">
+      <rect x="0" y="0" width="150" height="90" rx="10" fill="url(#pcb)" stroke="#0a3d1f" stroke-width="1.5"/>
+      <rect x="14" y="30" width="46" height="40" rx="4" fill="#11161c" stroke="#3a4754"/>
+      <text x="37" y="54" text-anchor="middle" font-size="9" fill="#cdd7e2">nRF</text>
+      <text x="37" y="64" text-anchor="middle" font-size="9" fill="#cdd7e2">52840</text>
+      <rect x="74" y="24" width="58" height="52" rx="4" fill="url(#cc)" stroke="#13284a"/>
+      <text x="103" y="46" text-anchor="middle" font-size="9" fill="#dce6f5">CC2530</text>
+      <text x="103" y="58" text-anchor="middle" font-size="8" fill="#a9c2e6">radio</text>
+      <path d="M132 24 l8 -8 l-6 -2 l8 -8" fill="none" stroke="#dce6f5" stroke-width="2"/>
+      <path d="M150 6 a10 10 0 0 1 8 8" fill="none" stroke="#7fe1a8" stroke-width="1.6" opacity="0.8"/>
+      <rect x="58" y="84" width="34" height="9" rx="2" fill="#9aa7b4"/>
+      <circle cx="0" cy="0" r="17" fill="#5aa0ff" stroke="#10396e" stroke-width="2"/>
+      <text x="0" y="5" text-anchor="middle" font-size="16" font-weight="700" fill="#06203f">R</text>
+    </g>
+    <text x="75" y="112" text-anchor="middle" font-size="15" font-weight="700" fill="#bcd6ff">board2</text>
+    <text x="75" y="129" text-anchor="middle" font-size="12" fill="#9fb3c8">Router</text>
+  </g>
+
+  <!-- board3 : Router -->
+  <g transform="translate(595,380)">
+    <g filter="url(#sh)">
+      <rect x="0" y="0" width="150" height="90" rx="10" fill="url(#pcb)" stroke="#0a3d1f" stroke-width="1.5"/>
+      <rect x="14" y="30" width="46" height="40" rx="4" fill="#11161c" stroke="#3a4754"/>
+      <text x="37" y="54" text-anchor="middle" font-size="9" fill="#cdd7e2">nRF</text>
+      <text x="37" y="64" text-anchor="middle" font-size="9" fill="#cdd7e2">52840</text>
+      <rect x="74" y="24" width="58" height="52" rx="4" fill="url(#cc)" stroke="#13284a"/>
+      <text x="103" y="46" text-anchor="middle" font-size="9" fill="#dce6f5">CC2530</text>
+      <text x="103" y="58" text-anchor="middle" font-size="8" fill="#a9c2e6">radio</text>
+      <path d="M132 24 l8 -8 l-6 -2 l8 -8" fill="none" stroke="#dce6f5" stroke-width="2"/>
+      <path d="M150 6 a10 10 0 0 1 8 8" fill="none" stroke="#7fe1a8" stroke-width="1.6" opacity="0.8"/>
+      <rect x="58" y="84" width="34" height="9" rx="2" fill="#9aa7b4"/>
+      <circle cx="0" cy="0" r="17" fill="#5aa0ff" stroke="#10396e" stroke-width="2"/>
+      <text x="0" y="5" text-anchor="middle" font-size="16" font-weight="700" fill="#06203f">R</text>
+    </g>
+    <text x="75" y="112" text-anchor="middle" font-size="15" font-weight="700" fill="#bcd6ff">board3</text>
+    <text x="75" y="129" text-anchor="middle" font-size="12" fill="#9fb3c8">Router</text>
+  </g>
+
+  <!-- board4 : End device -->
+  <g transform="translate(175,548)">
+    <g filter="url(#sh)">
+      <rect x="0" y="0" width="150" height="78" rx="10" fill="url(#pcb)" stroke="#0a3d1f" stroke-width="1.5"/>
+      <rect x="14" y="24" width="46" height="38" rx="4" fill="#11161c" stroke="#3a4754"/>
+      <text x="37" y="46" text-anchor="middle" font-size="9" fill="#cdd7e2">nRF</text>
+      <text x="37" y="56" text-anchor="middle" font-size="9" fill="#cdd7e2">52840</text>
+      <rect x="74" y="20" width="58" height="46" rx="4" fill="url(#cc)" stroke="#13284a"/>
+      <text x="103" y="40" text-anchor="middle" font-size="9" fill="#dce6f5">CC2530</text>
+      <text x="103" y="52" text-anchor="middle" font-size="8" fill="#a9c2e6">radio</text>
+      <path d="M132 20 l8 -8 l-6 -2 l8 -8" fill="none" stroke="#dce6f5" stroke-width="2"/>
+      <circle cx="0" cy="0" r="16" fill="#69d68a" stroke="#0c5026" stroke-width="2"/>
+      <text x="0" y="5" text-anchor="middle" font-size="14" font-weight="700" fill="#073a1a">E</text>
+    </g>
+    <text x="75" y="100" text-anchor="middle" font-size="15" font-weight="700" fill="#a9efc2">board4</text>
+    <text x="75" y="117" text-anchor="middle" font-size="12" fill="#9fb3c8">End device (sleepy)</text>
+  </g>
+
+  <!-- board5 : Green Power -->
+  <g transform="translate(595,548)">
+    <g filter="url(#sh)">
+      <rect x="0" y="0" width="150" height="78" rx="10" fill="url(#pcb)" stroke="#0a3d1f" stroke-width="1.5"/>
+      <rect x="14" y="24" width="46" height="38" rx="4" fill="#11161c" stroke="#3a4754"/>
+      <text x="37" y="46" text-anchor="middle" font-size="9" fill="#cdd7e2">nRF</text>
+      <text x="37" y="56" text-anchor="middle" font-size="9" fill="#cdd7e2">52840</text>
+      <rect x="74" y="20" width="58" height="46" rx="4" fill="url(#cc)" stroke="#13284a"/>
+      <text x="103" y="40" text-anchor="middle" font-size="9" fill="#dce6f5">CC2530</text>
+      <text x="103" y="52" text-anchor="middle" font-size="8" fill="#a9c2e6">radio</text>
+      <path d="M132 20 l8 -8 l-6 -2 l8 -8" fill="none" stroke="#dce6f5" stroke-width="2"/>
+      <circle cx="0" cy="0" r="16" fill="#b3a6ff" stroke="#2c1f63" stroke-width="2"/>
+      <text x="0" y="5" text-anchor="middle" font-size="11" font-weight="700" fill="#1c1147">GP</text>
+    </g>
+    <text x="75" y="100" text-anchor="middle" font-size="15" font-weight="700" fill="#cfc4ff">board5</text>
+    <text x="75" y="117" text-anchor="middle" font-size="12" fill="#9fb3c8">Green Power (battery-less)</text>
+  </g>
+
+  <!-- legend -->
+  <g transform="translate(30,690)" font-size="12" fill="#9fb3c8">
+    <circle cx="8" cy="-4" r="7" fill="#ffce46"/><text x="22" y="0">Coordinator</text>
+    <circle cx="118" cy="-4" r="7" fill="#5aa0ff"/><text x="132" y="0">Router</text>
+    <circle cx="196" cy="-4" r="7" fill="#69d68a"/><text x="210" y="0">End device</text>
+    <circle cx="300" cy="-4" r="7" fill="#b3a6ff"/><text x="314" y="0">Green Power</text>
+    <line x1="410" y1="-4" x2="446" y2="-4" stroke="#7fe1a8" stroke-width="4"/><text x="452" y="0">active link</text>
+    <line x1="540" y1="-4" x2="576" y2="-4" stroke="#ff9e6d" stroke-width="3" stroke-dasharray="9 7"/><text x="582" y="0">route repair</text>
+  </g>
+</svg>
