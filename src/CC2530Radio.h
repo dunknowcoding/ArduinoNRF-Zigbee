@@ -40,6 +40,8 @@
 #include "ZigbeeFindingBinding.h"
 #include "ZigbeeIasZoneCluster.h"
 #include "ZigbeeOtaCluster.h"
+#include "ZigbeeThermostatCluster.h"
+#include "ZigbeeWindowCoveringCluster.h"
 #include "ZigbeeLight.h"
 
 using nzb::CC2530Radio;
@@ -227,6 +229,19 @@ using nzb::ZigbeeOtaCluster;
 using nzb::OtaImageId;
 using nzb::OTA_STATUS_SUCCESS;
 using nzb::OTA_STATUS_NO_IMAGE_AVAILABLE;
+using nzb::ZigbeeThermostatCluster;
+using nzb::ThermostatState;
+using nzb::THERMOSTAT_CMD_SETPOINT_RAISE_LOWER;
+using nzb::THERMOSTAT_SETPOINT_HEAT;
+using nzb::THERMOSTAT_SETPOINT_COOL;
+using nzb::THERMOSTAT_SETPOINT_BOTH;
+using nzb::ZigbeeWindowCoveringCluster;
+using nzb::WindowCoveringState;
+using nzb::WINDOW_CMD_UP_OPEN;
+using nzb::WINDOW_CMD_DOWN_CLOSE;
+using nzb::WINDOW_CMD_STOP;
+using nzb::WINDOW_CMD_GO_TO_LIFT_PERCENTAGE;
+using nzb::WINDOW_CMD_GO_TO_TILT_PERCENTAGE;
 using nzb::ZDO_TYPE_COORDINATOR;
 using nzb::ZDO_TYPE_ROUTER;
 using nzb::ZDO_TYPE_END_DEVICE;

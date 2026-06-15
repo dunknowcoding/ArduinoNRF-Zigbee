@@ -217,8 +217,10 @@ while preserving the existing raw send / receive / sniffer APIs.
 > - **M6 Device abstraction** - `ZigbeeLight` ties On/Off + Level + Color +
 >   Identify + Groups + Scenes into one device; `ZigbeeIasZoneCluster` sensor
 >   (14/14).
-> Remaining beyond this batch: more HA clusters; plus multi-board OTA
-> verification of source routing on a stable 2-hop bench. **Fully-secured
+> Remaining beyond this batch: multi-board OTA verification of source routing on
+> a stable 2-hop bench (and any further HA clusters as needed - Thermostat and
+> Window Covering are now added, `CC2530_HaClusters` 12/12, so the device set
+> spans light / switch / sensor / thermostat / blinds). **Fully-secured
 > multi-hop source routing is now DONE:** secureNpdu/openNpdu zero the mutable
 > relay-index byte in the CCM* AAD, so a relay can rewrite it without breaking
 > the MIC while the rest of the NWK header stays authenticated
