@@ -492,8 +492,14 @@ while preserving the existing raw send / receive / sniffer APIs.
     frame-counter replay protection. `CC2530_GreenPower` self-tests it 20/20 on
     hardware: commissioning key transport, secured-frame round trip (command
     encrypted on the wire, tamper + wrong-key rejected), and a sink decrypting
-    and accepting a live GPD frame. What remains: GP proxy forwarding and the GP
-    sink ZCL cluster (0x0021) to commission GPDs from the network side.
+    and accepting a live GPD frame. **OTA-verified on the bench**
+    (`CC2530_GreenPowerLink`, -DNIUS_ZIGBEE_GP_ROLE=1 GPD / =2 sink): a GPD with
+    NO network join broadcasts a secured Toggle GPDF (encrypted command,
+    advancing frame counter) every 3 s on a raw 802.15.4 broadcast, and the sink
+    parses + decrypts it (mic ok), rejects replays (monotonic counter), and
+    toggles its built-in LED - confirmed alternating LED=ON/OFF on hardware. What
+    remains: GP proxy forwarding and the GP sink ZCL cluster (0x0021) to
+    commission GPDs from the network side.
 
 15. **Inter-PAN transmission** - DONE. `ZigbeeInterPan` builds/parses the
     inter-PAN APDU - a one-octet stub NWK header (0x0B: frame type inter-PAN,
