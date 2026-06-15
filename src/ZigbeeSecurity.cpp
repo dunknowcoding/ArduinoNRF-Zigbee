@@ -46,8 +46,9 @@ inline void setNwkSecurityBit(uint8_t* npdu, bool on) {
 }  // namespace
 
 ZigbeeSecurity::ZigbeeSecurity()
-    : hasKey_(false), keySequence_(0), stats_() {
+    : hasKey_(false), keySequence_(0), hasAlt_(false), altKeySeq_(0), stats_() {
   memset(key_, 0, sizeof(key_));
+  memset(altKey_, 0, sizeof(altKey_));
   resetReplayTable();
 }
 
@@ -56,6 +57,32 @@ void ZigbeeSecurity::setNetworkKey(const uint8_t key[kKeyLen],
   memcpy(key_, key, kKeyLen);
   keySequence_ = keySequence;
   hasKey_ = true;
+}
+
+void ZigbeeSecurity::setAlternateKey(const uint8_t key[kKeyLen],
+                                     uint8_t keySequence) {
+  memcpy(altKey_, key, kKeyLen);
+  altKeySeq_ = keySequence;
+  hasAlt_ = true;
+}
+
+bool ZigbeeSecurity::switchKey(uint8_t keySequence) {
+  if (hasKey_ && keySequence == keySequence_) return true;  // already active
+  if (hasAlt_ && keySequence == altKeySeq_) {
+    // Swap: the alternate becomes active; the old active is kept as alternate
+    // so in-flight frames under it still decrypt during the transition.
+    uint8_t tmpKey[kKeyLen];
+    uint8_t tmpSeq = keySequence_;
+    memcpy(tmpKey, key_, kKeyLen);
+    memcpy(key_, altKey_, kKeyLen);
+    keySequence_ = altKeySeq_;
+    memcpy(altKey_, tmpKey, kKeyLen);
+    altKeySeq_ = tmpSeq;
+    hasAlt_ = hasKey_;  // the previous active key is now the alternate
+    hasKey_ = true;
+    return true;
+  }
+  return false;
 }
 
 void ZigbeeSecurity::resetReplayTable() {
@@ -164,6 +191,22 @@ uint8_t ZigbeeSecurity::openNpdu(const uint8_t* npdu, uint8_t npduLen,
   uint64_t srcIeee = readLe64(&aux[5]);
   uint8_t controlCrypto = (uint8_t)((aux[0] & ~0x07) | kLevel);
 
+  // Select the decryption key by the aux header's key sequence number. With a
+  // single key this is always key_ (behaviour unchanged); during a key rotation
+  // an alternate key lets frames secured under either key be accepted.
+  const uint8_t* useKey = key_;
+  if (hasAlt_) {
+    uint8_t keySeq = aux[13];
+    if (keySeq == keySequence_) {
+      useKey = key_;
+    } else if (keySeq == altKeySeq_) {
+      useKey = altKey_;
+    } else {
+      ++stats_.micFailures;
+      return 0;
+    }
+  }
+
   uint8_t cipherLen =
       (uint8_t)(npduLen - headerLen - kAuxLen - kMicLen);
   uint8_t plainTotal = (uint8_t)(headerLen + cipherLen);
@@ -192,7 +235,7 @@ uint8_t ZigbeeSecurity::openNpdu(const uint8_t* npdu, uint8_t npduLen,
       a[15] = (uint8_t)(counter & 0xFF);
       ++counter;
       uint8_t ks[16];
-      if (!NrfEcb::encrypt(key_, a, ks)) return 0;
+      if (!NrfEcb::encrypt(useKey, a, ks)) return 0;
       for (uint8_t i = 0; i < 16 && pos < cipherLen; ++i, ++pos) {
         plain[pos] = npdu[headerLen + kAuxLen + pos] ^ ks[i];
       }
@@ -209,8 +252,8 @@ uint8_t ZigbeeSecurity::openNpdu(const uint8_t* npdu, uint8_t npduLen,
   aadBuf[headerLen] = controlCrypto;
 
   const uint8_t* mic = &npdu[npduLen - kMicLen];
-  if (!ccmStar(false, nonce, aadBuf, aadLen, plain, cipherLen, nullptr, mic,
-               nullptr)) {
+  if (!ccmStarCrypt(false, useKey, kMicLen, nonce, aadBuf, aadLen, plain,
+                    cipherLen, nullptr, mic, nullptr)) {
     ++stats_.micFailures;
     return 0;
   }

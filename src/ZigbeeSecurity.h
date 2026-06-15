@@ -48,6 +48,21 @@ class ZigbeeSecurity {
   bool hasKey() const { return hasKey_; }
   uint8_t keySequence() const { return keySequence_; }
 
+  /** Hold a second (alternate) network key for a key rotation: the Trust Center
+      distributes a new key with a fresh sequence number, then broadcasts a
+      Switch-Key. While both are held, incoming frames are decrypted with the
+      key whose sequence number matches their aux header, so traffic secured
+      under either key is accepted across the switchover. */
+  void setAlternateKey(const uint8_t key[kKeyLen], uint8_t keySequence);
+  bool hasAlternateKey() const { return hasAlt_; }
+  uint8_t alternateKeySequence() const { return altKeySeq_; }
+
+  /** Switch the active (outgoing) key to the one with @p keySequence. If it is
+      the alternate key, it becomes active and the old active becomes the
+      alternate (so late frames under the old key still decrypt). @return true
+      if a matching key was made active. */
+  bool switchKey(uint8_t keySequence);
+
   /** Secure a plain NPDU (NWK header + payload).
       @param npdu      plain frame, payload starting at @p headerLen
       @param srcIeee   our IEEE address (goes into the aux header / nonce)
@@ -78,6 +93,9 @@ class ZigbeeSecurity {
   bool hasKey_;
   uint8_t key_[kKeyLen];
   uint8_t keySequence_;
+  bool hasAlt_;
+  uint8_t altKey_[kKeyLen];
+  uint8_t altKeySeq_;
   ZigbeeSecurityStats stats_;
   ReplayEntry replay_[kMaxReplayPeers];
 
