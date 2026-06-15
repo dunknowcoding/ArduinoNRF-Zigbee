@@ -41,6 +41,7 @@ ZigbeeApsSecurity	KEYWORD1
 ZigbeeCcmStar	KEYWORD1
 ZigbeePersistence	KEYWORD1
 ZigbeeBindingTable	KEYWORD1
+ZigbeeFindingBinding	KEYWORD1
 ZigbeeBroadcastTable	KEYWORD1
 ZigbeeIndirectQueue	KEYWORD1
 ZigbeeEndDeviceTimeout	KEYWORD1

@@ -37,6 +37,7 @@
 #include "ZigbeeScenesCluster.h"
 #include "ZigbeeColorControlCluster.h"
 #include "ZigbeeZdoMgmt.h"
+#include "ZigbeeFindingBinding.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -212,6 +213,7 @@ using nzb::ZDO_MGMT_LQI_REQ;
 using nzb::ZDO_MGMT_LQI_RSP;
 using nzb::ZigbeeZdoMgmt;
 using nzb::ZdoNodeDescriptor;
+using nzb::ZigbeeFindingBinding;
 using nzb::ZDO_TYPE_COORDINATOR;
 using nzb::ZDO_TYPE_ROUTER;
 using nzb::ZDO_TYPE_END_DEVICE;
