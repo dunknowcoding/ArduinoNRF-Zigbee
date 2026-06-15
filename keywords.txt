@@ -61,6 +61,8 @@ ZigbeeOtaCluster	KEYWORD1
 ZigbeeThermostatCluster	KEYWORD1
 ZigbeeWindowCoveringCluster	KEYWORD1
 ZigbeeTouchlink	KEYWORD1
+ZigbeeGreenPower	KEYWORD1
+ZigbeeGpSinkTable	KEYWORD1
 ZigbeeAes128Decrypt	KEYWORD1
 ZigbeeSceneTable	KEYWORD1
 ApsTransportKey	KEYWORD1

@@ -479,3 +479,18 @@ while preserving the existing raw send / receive / sniffer APIs.
     wire the commands onto inter-PAN transmission (a stub NWK/APS over a raw MAC
     frame) and confirm the key-index-4 expanded-input order against a certified
     ZLL reference vector.
+
+14. **Green Power** - DONE (GPDF + GP security + commissioning + sink table).
+    Green Power devices (GPDs) are battery-less switches/sensors that emit Green
+    Power Data Frames - a stub NWK frame (protocol version 3) with a GPD source
+    id, frame counter, command, and an AES-CCM* MIC. `ZigbeeGreenPower` builds/
+    parses the GPDF (unsecured for commissioning, and level-3 encrypted-command
+    + 4-byte FC + 4-byte MIC), secures/opens it with the hardware-verified CCM*
+    core (GP nonce = srcId||srcId||frameCounter||securityControl), and builds/
+    parses the GP commissioning command (0xE0, carrying the GPD key).
+    `ZigbeeGpSinkTable` commissions GPDs (stores the key) with per-GPD
+    frame-counter replay protection. `CC2530_GreenPower` self-tests it 20/20 on
+    hardware: commissioning key transport, secured-frame round trip (command
+    encrypted on the wire, tamper + wrong-key rejected), and a sink decrypting
+    and accepting a live GPD frame. What remains: GP proxy forwarding and the GP
+    sink ZCL cluster (0x0021) to commission GPDs from the network side.

@@ -45,6 +45,7 @@
 #include "ZigbeeLight.h"
 #include "ZigbeeAes128Decrypt.h"
 #include "ZigbeeTouchlink.h"
+#include "ZigbeeGreenPower.h"
 
 using nzb::CC2530Radio;
 using nzb::ZigbeeAes128Decrypt;
@@ -56,6 +57,17 @@ using nzb::ZLL_CMD_SCAN_RESPONSE;
 using nzb::ZLL_CMD_IDENTIFY_REQUEST;
 using nzb::ZLL_CMD_NETWORK_JOIN_ROUTER_REQUEST;
 using nzb::ZLL_KEY_MASTER;
+using nzb::ZigbeeGreenPower;
+using nzb::ZigbeeGpSinkTable;
+using nzb::GpdfFrame;
+using nzb::GpSinkEntry;
+using nzb::GpCommissioningCommand;
+using nzb::GPD_CMD_TOGGLE;
+using nzb::GPD_CMD_ON;
+using nzb::GPD_CMD_OFF;
+using nzb::GPD_CMD_COMMISSIONING;
+using nzb::GP_SEC_ENC_FC_MIC;
+using nzb::GP_SEC_NONE;
 using nzb::CC2530MacInfo;
 using nzb::CC2530RxCallback;
 using nzb::CC2530DataCallback;
