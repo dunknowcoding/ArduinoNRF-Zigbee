@@ -86,6 +86,7 @@ class ZigbeeZcl {
   static const uint16_t kClusterLevelControl = 0x0008;
   static const uint16_t kClusterColorControl = 0x0300;
   static const uint16_t kClusterIasZone = 0x0500;
+  static const uint16_t kClusterOtaUpgrade = 0x0019;
   static const uint16_t kAttrOnOff = 0x0000;
   static const uint16_t kAttrBasicZclVersion = 0x0000;
   static const uint16_t kAttrBasicApplicationVersion = 0x0001;

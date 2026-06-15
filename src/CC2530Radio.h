@@ -39,6 +39,7 @@
 #include "ZigbeeZdoMgmt.h"
 #include "ZigbeeFindingBinding.h"
 #include "ZigbeeIasZoneCluster.h"
+#include "ZigbeeOtaCluster.h"
 #include "ZigbeeLight.h"
 
 using nzb::CC2530Radio;
@@ -222,6 +223,10 @@ using nzb::IAS_STATUS_ALARM1;
 using nzb::IAS_STATUS_TAMPER;
 using nzb::IAS_ZONE_TYPE_CONTACT;
 using nzb::IAS_ENROLL_SUCCESS;
+using nzb::ZigbeeOtaCluster;
+using nzb::OtaImageId;
+using nzb::OTA_STATUS_SUCCESS;
+using nzb::OTA_STATUS_NO_IMAGE_AVAILABLE;
 using nzb::ZDO_TYPE_COORDINATOR;
 using nzb::ZDO_TYPE_ROUTER;
 using nzb::ZDO_TYPE_END_DEVICE;

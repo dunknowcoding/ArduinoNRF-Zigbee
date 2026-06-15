@@ -218,9 +218,12 @@ while preserving the existing raw send / receive / sniffer APIs.
 >   Identify + Groups + Scenes into one device; `ZigbeeIasZoneCluster` sensor
 >   (14/14).
 > Remaining beyond this batch: fully-secured multi-hop source routing (mutable
-> relay index excluded from the CCM* AAD), OTA Upgrade cluster, and more HA
-> clusters; plus multi-board OTA verification of source routing on a stable
-> 2-hop bench.
+> relay index excluded from the CCM* AAD) and more HA clusters; plus multi-board
+> OTA verification of source routing on a stable 2-hop bench. The **OTA Upgrade
+> cluster** (0x0019) is now DONE: `ZigbeeOtaCluster` builds/parses Query Next
+> Image, Image Block, and Upgrade End (request + response); `CC2530_OtaUpgrade`
+> self-tests a full image transfer 8/8 (query -> block download -> reassemble
+> matching the server image -> upgrade end).
 
 1. **Key transport** - command frames DONE; APS-layer encryption envelope
    DONE + HW-verified; join-time handshake remains. `ZigbeeApsKey` builds/parses
