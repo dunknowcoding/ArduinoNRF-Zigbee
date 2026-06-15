@@ -350,7 +350,7 @@ bool applyAddress(uint16_t panId, uint16_t shortAddress) {
   bool ok = radio.setAddress(panId, shortAddress, ieeeBytes);
   ok = ok && radio.configureMac(
       CC2530Radio::kMacFilter | CC2530Radio::kMacAutoAck |
-      CC2530Radio::kMacCcaTx, 3);
+      CC2530Radio::kMacCcaTx, 5);  // 5 MAC retries/hop: multi-hop reliability
   return ok;
 }
 
@@ -987,8 +987,8 @@ void serviceRouteDiscovery() {
                                           (const uint8_t*)msg, (uint8_t)len,
                                           /*ackRequest=*/true);
     bool ok = sendApsRouted(target, apdu, n);
-    apsRetx.add(target, apsCounter, APS_ENDPOINT, apdu, n, /*maxRetries=*/3,
-                /*intervalMs=*/1500, millis());
+    apsRetx.add(target, apsCounter, APS_ENDPOINT, apdu, n, /*maxRetries=*/8,
+                /*intervalMs=*/1200, millis());  // more end-to-end tries on multi-hop
     Serial.print("APS send seq="); Serial.print(apsSeq);
     Serial.print(" cnt="); Serial.print(apsCounter);
     Serial.print(" -> 0x"); printHex16(target);
@@ -997,7 +997,11 @@ void serviceRouteDiscovery() {
   }
 
   // Periodically map the network: ask the coordinator for its neighbor table
-  // (standard Mgmt_Lqi_req), re-sending until the rsp comes back.
+  // (standard Mgmt_Lqi_req), re-sending until the rsp comes back. Skipped on the
+  // multi-hop test topologies, where the long rsp rarely survives the extra hops
+  // and the repeated retries just add channel contention that hurts the data
+  // plane's delivery rate.
+#if !MULTI_TOPO
   if (!mgmtLqiPending && (int32_t)(millis() - nextMgmtLqiCycleAt) >= 0) {
     mgmtLqiPending = true;
     mgmtLqiTries = 0;
@@ -1027,6 +1031,7 @@ void serviceRouteDiscovery() {
       Serial.print(" -> 0x"); printHex16(target); Serial.println();
     }
   }
+#endif  // !MULTI_TOPO
 }
 
 // Re-send any APS frame whose ACK is overdue. Runs for ALL roles: the end
