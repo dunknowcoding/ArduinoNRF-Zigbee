@@ -43,13 +43,27 @@
 #define NIUS_ZIGBEE_THIS_NODE 0x0001
 #endif
 
+// 4-node line topology A-B-C-D (-DNIUS_ZIGBEE_LINE_TOPO=1): A coordinator, B and
+// C routers, D end device. The range-sim chains them so each node hears only its
+// line-neighbors, forcing a genuine 3-hop path D->C->B->A (for multi-hop +
+// source-route OTA tests). Without it, 0x0003/0x0004 are plain end devices.
+#ifndef NIUS_ZIGBEE_LINE_TOPO
+#define NIUS_ZIGBEE_LINE_TOPO 0
+#endif
+
+#if NIUS_ZIGBEE_LINE_TOPO
+#define ROLE_COORD  (NIUS_ZIGBEE_THIS_NODE == 0x0001)
+#define ROLE_ROUTER (NIUS_ZIGBEE_THIS_NODE == 0x0002 || NIUS_ZIGBEE_THIS_NODE == 0x0003)
+#define ROLE_END    (NIUS_ZIGBEE_THIS_NODE == 0x0004)
+#define ROLE_END_D  (NIUS_ZIGBEE_THIS_NODE == 0x0004)
+#else
 // Node 0x0004 ("D") is a second end device, so a 4th board (e.g. a nice!nano)
-// can join the same mesh - either as another leaf, or as the tail of a
-// multi-hop line when the range-sim chains the nodes.
+// can join the same mesh as another leaf.
 #define ROLE_COORD  (NIUS_ZIGBEE_THIS_NODE == 0x0001)
 #define ROLE_ROUTER (NIUS_ZIGBEE_THIS_NODE == 0x0002)
 #define ROLE_END    (NIUS_ZIGBEE_THIS_NODE == 0x0003 || NIUS_ZIGBEE_THIS_NODE == 0x0004)
 #define ROLE_END_D  (NIUS_ZIGBEE_THIS_NODE == 0x0004)
+#endif
 
 // Secure commissioning (Zigbee-3.0-style key transport). When enabled, the
 // joiner starts with ONLY the default Trust Center link key "ZigBeeAlliance09"
@@ -97,22 +111,58 @@ static const uint8_t JOINER_CAPABILITY = ROLE_END ? 0x88 : 0x8A;
 //   A pool 0x0001..0x000F -> B gets 0x0001
 //   B pool 0x0031..0x003F -> C gets 0x0031
 static const uint16_t COORD_POOL_FIRST = 0x0001, COORD_POOL_LAST = 0x000F;
-static const uint16_t ROUTER_POOL_FIRST = 0x0031, ROUTER_POOL_LAST = 0x003F;
+#if NIUS_ZIGBEE_LINE_TOPO && (NIUS_ZIGBEE_THIS_NODE == 0x0003)
+static const uint16_t ROUTER_POOL_FIRST = 0x0061, ROUTER_POOL_LAST = 0x006F;  // C's pool
+#else
+static const uint16_t ROUTER_POOL_FIRST = 0x0031, ROUTER_POOL_LAST = 0x003F;  // B's pool
+#endif
 static const uint16_t EXPECTED_C_ADDR = 0x0031;
 
-// Simulated out-of-range peer (the node we pretend not to hear directly).
+// Range-sim ignore lists: the short addresses + IEEEs of peers this node
+// pretends not to hear, so a desired topology is forced on a bench where every
+// radio is in range. NO_RANGE_SIM => effectively empty (the mesh self-organizes).
 #if defined(NIUS_ZIGBEE_NO_RANGE_SIM)
-static const uint16_t IGNORE_PEER_SHORT = 0xFFFF;
-static const uint64_t IGNORE_PEER_IEEE = 0xFFFFFFFFFFFFFFFFULL;
+static const uint16_t IGNORE_SHORTS[] = {0xFFFF};
+static const uint64_t IGNORE_IEEES[] = {0xFFFFFFFFFFFFFFFFULL};
+#elif NIUS_ZIGBEE_LINE_TOPO
+// line A(0x0000)-B(0x0001)-C(0x0031)-D(0x0061): each hears only its neighbors.
+#if ROLE_COORD                                   // A: ignore C, D
+static const uint16_t IGNORE_SHORTS[] = {0x0031, 0x0061};
+static const uint64_t IGNORE_IEEES[] = {0x1A62195E00000003ULL, 0x1A62195E00000004ULL};
+#elif (NIUS_ZIGBEE_THIS_NODE == 0x0002)          // B: ignore D
+static const uint16_t IGNORE_SHORTS[] = {0x0061};
+static const uint64_t IGNORE_IEEES[] = {0x1A62195E00000004ULL};
+#elif (NIUS_ZIGBEE_THIS_NODE == 0x0003)          // C: ignore A
+static const uint16_t IGNORE_SHORTS[] = {0x0000};
+static const uint64_t IGNORE_IEEES[] = {0x1A62195E00000001ULL};
+#else                                            // D: ignore A, B
+static const uint16_t IGNORE_SHORTS[] = {0x0000, 0x0001};
+static const uint64_t IGNORE_IEEES[] = {0x1A62195E00000001ULL, 0x1A62195E00000002ULL};
+#endif
 #elif ROLE_COORD
-static const uint16_t IGNORE_PEER_SHORT = EXPECTED_C_ADDR;          // ignore C
-static const uint64_t IGNORE_PEER_IEEE = 0x1A62195E00000000ULL | 0x0003;
+static const uint16_t IGNORE_SHORTS[] = {EXPECTED_C_ADDR};          // ignore C
+static const uint64_t IGNORE_IEEES[] = {0x1A62195E00000000ULL | 0x0003};
 #elif ROLE_END
-static const uint16_t IGNORE_PEER_SHORT = 0x0000;                  // ignore A
-static const uint64_t IGNORE_PEER_IEEE = 0x1A62195E00000000ULL | 0x0001;
+static const uint16_t IGNORE_SHORTS[] = {0x0000};                   // ignore A
+static const uint64_t IGNORE_IEEES[] = {0x1A62195E00000000ULL | 0x0001};
 #else
-static const uint16_t IGNORE_PEER_SHORT = 0xFFFF;
-static const uint64_t IGNORE_PEER_IEEE = 0xFFFFFFFFFFFFFFFFULL;
+static const uint16_t IGNORE_SHORTS[] = {0xFFFF};
+static const uint64_t IGNORE_IEEES[] = {0xFFFFFFFFFFFFFFFFULL};
+#endif
+static const uint8_t IGNORE_COUNT = sizeof(IGNORE_SHORTS) / sizeof(IGNORE_SHORTS[0]);
+
+#if NIUS_ZIGBEE_LINE_TOPO
+// Each line node joins a parent at exactly this depth (B<-A depth 0, C<-B
+// depth 1, D<-C depth 2), so the chain forms deterministically regardless of
+// the pool-assigned short addresses. Paired with the IEEE association-ignore
+// lists (A accepts only B, B only C, C only D), this gives a clean 3-hop line.
+#if (NIUS_ZIGBEE_THIS_NODE == 0x0002)
+static const uint8_t LINE_PARENT_DEPTH = 0;
+#elif (NIUS_ZIGBEE_THIS_NODE == 0x0003)
+static const uint8_t LINE_PARENT_DEPTH = 1;
+#else  // 0x0004 (D)
+static const uint8_t LINE_PARENT_DEPTH = 2;
+#endif
 #endif
 
 #if NIUS_ZIGBEE_SECURE_JOIN
@@ -225,12 +275,25 @@ static const uint32_t SAVE_PERIOD_MS = 20000;
 static const uint32_t COUNTER_MARGIN = 1024;
 
 const char* roleName() {
-  return ROLE_COORD ? "A/coordinator" : ROLE_ROUTER ? "B/router"
-       : ROLE_END_D ? "D/end" : "C/end";
+  switch (THIS_NODE) {
+    case 0x0001: return "A/coordinator";
+    case 0x0002: return "B/router";
+    case 0x0003: return ROLE_ROUTER ? "C/router" : "C/end";
+    case 0x0004: return "D/end";
+    default: return "?/node";
+  }
 }
 
-bool ignoredShort(uint16_t macSrc) { return macSrc == IGNORE_PEER_SHORT; }
-bool ignoredIeee(uint64_t ieee) { return ieee == IGNORE_PEER_IEEE; }
+bool ignoredShort(uint16_t macSrc) {
+  for (uint8_t i = 0; i < IGNORE_COUNT; ++i)
+    if (macSrc == IGNORE_SHORTS[i]) return true;
+  return false;
+}
+bool ignoredIeee(uint64_t ieee) {
+  for (uint8_t i = 0; i < IGNORE_COUNT; ++i)
+    if (ieee == IGNORE_IEEES[i]) return true;
+  return false;
+}
 
 void printHex8(uint8_t v) { if (v < 0x10) Serial.print('0'); Serial.print(v, HEX); }
 void printHex16(uint16_t v) {
@@ -367,6 +430,9 @@ void onBeacon(const MacBeaconFrame& beacon, int8_t rssi, uint8_t lqi) {
   if (ignoredShort(beacon.srcShort)) return;  // simulated out of range
   NwkBeaconPayload payload;
   if (!ZigbeeNwk::parseBeaconPayload(beacon.payload, beacon.payloadLen, payload)) return;
+#if NIUS_ZIGBEE_LINE_TOPO
+  if (payload.deviceDepth != LINE_PARENT_DEPTH) return;  // join only the line parent
+#endif
   if (network.noteBeacon(scanChannel, beacon, payload, rssi, lqi & 0x7F)) {
     Serial.print("  beacon ch=");
     Serial.print(scanChannel);
