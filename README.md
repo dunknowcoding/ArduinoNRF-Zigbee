@@ -6,13 +6,17 @@ the [ArduinoNRF](https://github.com/dunknowcoding/ArduinoNRF) board package —
 kept as a **separate library** so the board package stays small.
 
 It ships a complete, verified driver + firmware for the cheap **AliExpress
-CC2530 module** (raw 802.15.4 **send / receive / sniff**) and, on top of it, a
-growing **host-side Zigbee PRO stack** built natively on the nRF52840 — active
-scan + join, AODV route discovery, multi-hop forwarding, AES-CCM* NWK **and**
-APS security, end-to-end acked delivery, fragmentation, binding, persistence,
-Trust-Center key-transport tooling, sleepy-end-device support, and network
-management (Mgmt_Lqi, broadcast transaction table, PAN-ID conflict). No TI
-Z-Stack required; a future ZNP backend can still live beside the raw driver.
+CC2530 module** (raw 802.15.4 **send / receive / sniff**) and, on top of it, an
+essentially **full host-side Zigbee 3.0 stack** built natively on the nRF52840 —
+active scan + join, AODV routing + source routing, multi-hop forwarding, AES-CCM*
+NWK **and** APS security, end-to-end acked delivery, fragmentation, group
+multicast, binding, persistence, Trust-Center key transport + key rotation +
+install codes, BDB / finding-and-binding / **Touchlink** commissioning, **Green
+Power** (battery-less devices), a dozen ZCL device clusters, and network
+management. Verified on air on up to **5 boards** (ProMicro + nice!nano),
+including a 3-hop line at 100% delivery, a self-healing mesh, mesh + Green Power,
+and source-routed delivery. No TI Z-Stack required; a future ZNP backend can
+still live beside the raw driver.
 
 ## How it works
 
@@ -245,11 +249,31 @@ toward Zigbee PRO. Each ships with a hardware self-test example.
 - **Persistence & binding.** `ZigbeePersistence` serializes the network identity
   + frame counter (anti-replay across reboots); `ZigbeeBindingTable` stores
   source bindings with ZDO Bind/Unbind frames.
+- **Source routing.** `ZigbeeSourceRouteTable` + `ZigbeeNwk` Route Record /
+  source-routed data frames: an end device sends a Route Record up so the
+  concentrator learns the full path and then originates source-routed frames
+  back down, which relays forward by the named relay list.
+- **Groups & app encryption.** `ZigbeeGroupTable` + `ZigbeeGroupsCluster` for
+  group (multicast) addressing; `ZigbeeApsSecurity::secureDataFrame` adds an
+  end-to-end APS-layer link-key envelope on top of NWK security.
+- **Commissioning (BDB / Touchlink).** `ZigbeeBdb` runs the BDB commissioning
+  modes in precedence order; `ZigbeeFindingBinding` matches clusters and creates
+  bindings; `ZigbeeInstallCode` derives per-device link keys; `ZigbeeTouchlink`
+  does ZLL proximity commissioning (with `ZigbeeAes128Decrypt`, since the nRF
+  ECB is encrypt-only); `ZigbeeInterPan` is the inter-PAN transmission stub.
+- **Green Power.** `ZigbeeGreenPower` builds/secures Green Power Data Frames from
+  battery-less devices (GPDF + AES-CCM* + commissioning), and `ZigbeeGpSinkTable`
+  commissions GPDs with frame-counter replay protection.
+- **ZCL device clusters.** Basic, Identify, Groups, Scenes, On/Off, Level
+  Control, Color Control, Thermostat, Window Covering, IAS Zone, OTA Upgrade,
+  attribute reporting, and a `ZigbeeLight` device abstraction.
 
 ## Verified behavior
 
-Hardware verified with two ArduinoNRF ProMicro nRF52840 boards, each wired to a
-CC2530 module:
+Hardware verified with up to **five** nRF52840 boards (ProMicro clones and
+nice!nano v2), each wired to a CC2530 module running the bundled v0.4 SDCC
+transceiver firmware. The single- and two-board checks below; the multi-board
+topologies are in their own section further down.
 
 - `CC2530_FlashFirmware` detects `0xA5xx`, flashes the SDCC transceiver, and
   verifies read-back.
@@ -347,23 +371,67 @@ CC2530 module:
 - Promiscuous examples can still show unrelated 802.15.4 traffic on the channel;
   filtered examples program PAN/short/IEEE addresses before exchanging frames.
 
+### Multi-board topologies (4–5 boards, on air)
+
+`CC2530_BeaconJoin` builds named 4+ node topologies; each forces the desired
+shape on a bench of co-located radios with a depth-filtered join + IEEE
+association-ignore lists (deterministic regardless of the pool-assigned
+addresses). All verified on hardware, including a fourth/fifth node that is a
+**nice!nano with the S140 SoftDevice** (app at 0x26000, built for the
+`nicenano_v2` board) — the SoftDevice sits dormant so the hardware AES is free
+and the full stack runs identically to the no-SoftDevice ProMicro boards.
+
+- **3-hop line A-B-C-D** (`-DNIUS_ZIGBEE_LINE_TOPO=1`): the end device's
+  APS-acked data crosses `D->C->B->A` and back. With raised retry budgets (8 APS
+  retransmits, 5 MAC retries/hop) and the mapping query suppressed on multi-hop,
+  delivery is **100%** (`aps[q=15 ok=15 drop=0]`).
+- **2x2 mesh + route repair** (`-DNIUS_ZIGBEE_MESH_TOPO=1`): B and C are
+  redundant routers under A; the end device joins one, and when that parent is
+  silenced it detects the stall, re-scans, and **self-heals onto the other
+  router** (its address moves from one router's pool to the other's, delivery
+  resumes).
+- **Mesh + Green Power** (`-DNIUS_ZIGBEE_GP_SINK=1`): the coordinator runs the
+  4-node mesh **and** sinks a 5th board's Green Power frames — a battery-less GPD
+  toggles the coordinator's LED while the mesh keeps running on the same channel.
+- **Source-route OTA** (`-DNIUS_ZIGBEE_SOURCEROUTE=1`): the end device's Route
+  Record walks up the line (each relay appends itself), the concentrator learns
+  the full path and source-routes a frame back down, and the destination
+  delivers it (`SRCROUTE delivered ... "SR-ping"`).
+
 ## Current stack boundary
 
-NiusZigbee now implements a large, hardware-verified subset of Zigbee PRO on top
-of the SDCC CC2530 MAC/PHY backend: active scan + parent selection, MAC
-association join/rejoin, neighbor aging, AODV route discovery + multi-hop
-forwarding, NWK **and** APS AES-CCM* security, end-to-end acked delivery,
-fragmentation, ZDO discovery + network management (Mgmt_Lqi/Rtg), binding,
-persistence, Trust-Center key-transport tooling, broadcast transaction table,
-sleepy-end-device queue + keep-alive, and PAN-ID conflict frames.
+NiusZigbee now implements essentially the full Zigbee 3.0 surface on top of the
+SDCC CC2530 MAC/PHY backend, host-side on the nRF52840:
 
-It is **not yet certified Zigbee PRO**. Remaining work includes: finishing the
-on-air secure-join key install, many-to-one routing + source routing (Route
-Record), setting the ack frame-pending bit (needs CC2530 firmware), full ZCL
-cluster libraries + groups, install codes, and APS-layer encrypted application
-data. A future ZNP / Z-Stack backend can still live beside the raw driver. See
-the milestone-by-milestone status in
-[docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
+- **MAC:** short-address data frames, beacons, association, PAN/address
+  filtering, Auto ACK, CCA, retries.
+- **NWK:** active scan + parent selection, association join/rejoin, neighbor
+  aging, AODV route discovery + multi-hop forwarding, source routing (Route
+  Record collection + concentrator origination), broadcast transaction table,
+  PAN-ID conflict, AES-CCM* security.
+- **APS:** end-to-end acked delivery + retransmit + duplicate rejection,
+  fragmentation, group addressing, and an APS-layer application-data encryption
+  envelope (link-key, on top of NWK security).
+- **Security & commissioning:** Trust-Center key transport (AES-MMO / HMAC /
+  specialized keys / APS CCM*), key rotation, install codes, and the BDB
+  commissioning state machine tying together network steering / formation /
+  finding & binding / touchlink.
+- **ZDO:** discovery (addr / node & power descriptor / active EP / simple &
+  match descriptor), network management (Mgmt_Lqi/Rtg/Leave/Permit-Join), and
+  binding.
+- **ZCL:** Basic, Identify, Groups, Scenes, On/Off, Level Control, Color
+  Control, Thermostat, Window Covering, IAS Zone, OTA Upgrade, plus attribute
+  reporting and the `ZigbeeLight` device abstraction.
+- **Advanced:** Touchlink (ZLL) commissioning + a software AES-128 inverse
+  cipher (the nRF ECB is encrypt-only), Green Power (battery-less GPD frames +
+  CCM* security + sink table), and the inter-PAN transmission stub.
+
+It is **not** certified Zigbee PRO (that needs the official test harness), and a
+few refinements remain — chiefly NWK security AAD over the mutable source-route
+relay index (so source-routed frames can be secured on air) and setting the ack
+frame-pending bit for sleepy children (needs CC2530 firmware support). A future
+ZNP / Z-Stack backend can still live beside the raw driver. See the
+milestone-by-milestone status in [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules
 
