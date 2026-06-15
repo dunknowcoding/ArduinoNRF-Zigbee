@@ -190,6 +190,22 @@ class CC2530Radio {
                             uint8_t radius = ZigbeeNwk::kDefaultRadius,
                             bool ackRequest = false);
 
+  /** Transmit a SOURCE-ROUTED Zigbee NWK data frame, NWK-secured.
+      The concentrator originates with @p relayIndex 0 and @p macDstShort =
+      relays[0]; a relay rebuilds the frame with the advanced relay index and
+      its own MAC source/destination and calls this again. NWK security is
+      applied with the (mutable) relay-index byte excluded from the CCM* AAD, so
+      every hop re-secures under its own aux header without breaking the MIC of
+      the source-route subframe. With no key attached this degrades to an
+      unsecured source-routed frame. @return true on send. */
+  bool sendNwkDataSourceRouted(uint16_t panId, uint16_t macDstShort,
+                               uint16_t macSrcShort, uint16_t nwkDstShort,
+                               uint16_t nwkSrcShort, const uint16_t* relays,
+                               uint8_t relayCount, uint8_t relayIndex,
+                               const uint8_t* payload, uint8_t len,
+                               uint8_t radius = ZigbeeNwk::kDefaultRadius,
+                               uint8_t sequence = 0, bool ackRequest = true);
+
   /** Transmit a Zigbee NWK command frame inside a short-address MAC frame. */
   bool sendNwkCommand(uint16_t panId, uint16_t macDstShort,
                       uint16_t macSrcShort, uint16_t nwkDstShort,

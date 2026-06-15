@@ -412,6 +412,25 @@ bool CC2530Radio::sendNwkData(uint16_t panId, uint16_t macDstShort,
   return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
 }
 
+bool CC2530Radio::sendNwkDataSourceRouted(
+    uint16_t panId, uint16_t macDstShort, uint16_t macSrcShort,
+    uint16_t nwkDstShort, uint16_t nwkSrcShort, const uint16_t* relays,
+    uint8_t relayCount, uint8_t relayIndex, const uint8_t* payload, uint8_t len,
+    uint8_t radius, uint8_t sequence, bool ackRequest) {
+  uint8_t npdu[ZigbeeNwk::kMaxFrame + ZigbeeSecurity::kAuxLen +
+               ZigbeeSecurity::kMicLen];
+  uint8_t npduLen = ZigbeeNwk::buildDataFrameSourceRouted(
+      npdu, ZigbeeNwk::kMaxFrame, nwkDstShort, nwkSrcShort, radius, sequence,
+      relays, relayCount, relayIndex, payload, len);
+  if (npduLen == 0) return false;
+  // applyTxSecurity() computes the header length with nwkHeaderLength(), which
+  // already accounts for the source-route subframe, and secureNpdu() excludes
+  // the relay-index byte from the AAD - so the secured frame can be relayed with
+  // a bumped index without breaking the MIC.
+  if (!applyTxSecurity(npdu, npduLen, sizeof(npdu))) return false;
+  return sendData(panId, macDstShort, macSrcShort, npdu, npduLen, ackRequest);
+}
+
 bool CC2530Radio::sendNwkDataUnsecured(uint16_t panId, uint16_t macDstShort,
                                        uint16_t macSrcShort,
                                        uint16_t nwkDstShort,

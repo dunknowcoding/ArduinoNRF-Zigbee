@@ -36,6 +36,7 @@ no-SoftDevice ProMicro boards. See the ArduinoNRF core's
 | `CC2530_EndDeviceTimeout` — SED keep-alive negotiation | 18/18 |
 | `CC2530_PanIdConflict` — PAN-ID conflict detect + Network Report/Update | 16/16 |
 | `CC2530_DeviceClusters` — Door Lock / Occupancy / Temperature / Humidity / Electrical Measurement clusters (Read Attributes records, reports, lock commands, signed/unsigned 16-bit values) | 26/26 |
+| `CC2530_SourceRouteSecurity` — secured source-route OTA: relay-index AAD exclusion (bump the index on a secured frame and it still opens), per-hop re-secure, MIC integrity + replay rejection | 14/14 |
 | `CC2530_Fragmentation` / `CC2530_KeyTransport` / `CC2530_Binding` | APS fragment reassembly, TC key-transport frames, source binding table |
 
 ## Two boards (board1 + board2)

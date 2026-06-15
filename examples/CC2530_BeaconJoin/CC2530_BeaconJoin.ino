@@ -779,10 +779,14 @@ void onNwkData(const MacDataFrame& mac, const NwkDataFrame& nwk, int8_t rssi,
 #if NIUS_ZIGBEE_SOURCEROUTE
   // Source-route relaying: if the frame carries a source-route subframe, follow
   // it (next hop named in the frame) rather than the route table. The frame is
-  // rebuilt with the advanced relay index and forwarded unsecured.
+  // rebuilt with the advanced relay index and re-secured (NWK security under
+  // this relay's own aux header; the relay-index byte is AAD-excluded). The rx
+  // path above already verified+decrypted the inbound frame, so nwk.payload is
+  // the plaintext we re-secure on the way out.
   if (nwk.sourceRoute && nwk.dstShort == network.info().nwkAddress) {
     Serial.print("SRCROUTE delivered from 0x"); printHex16(nwk.srcShort);
-    Serial.print(" \"");
+    Serial.print(radio.security() && radio.security()->hasKey() ? " (secured) \""
+                                                                : " \"");
     for (uint8_t i = 0; i < nwk.payloadLen; ++i) Serial.print((char)nwk.payload[i]);
     Serial.println("\"");
     return;
@@ -799,13 +803,10 @@ void onNwkData(const MacDataFrame& mac, const NwkDataFrame& nwk, int8_t rssi,
     uint8_t payload[ZigbeeNwk::kMaxPayload];
     if (nwk.payloadLen > sizeof(payload)) return;
     memcpy(payload, nwk.payload, nwk.payloadLen);
-    uint8_t out[ZigbeeNwk::kMaxFrame + 24];
-    uint8_t n = ZigbeeNwk::buildDataFrameSourceRouted(
-        out, sizeof(out), nwk.dstShort, nwk.srcShort,
-        (uint8_t)(nwk.radius > 1 ? nwk.radius - 1 : 1), nwk.sequence, relays, rc,
-        outIdx, payload, nwk.payloadLen);
-    bool ok = n > 0 && radio.sendData(network.info().panId, nextHop,
-                                      network.info().nwkAddress, out, n, true);
+    bool ok = radio.sendNwkDataSourceRouted(
+        network.info().panId, nextHop, network.info().nwkAddress, nwk.dstShort,
+        nwk.srcShort, relays, rc, outIdx, payload, nwk.payloadLen,
+        (uint8_t)(nwk.radius > 1 ? nwk.radius - 1 : 1), nwk.sequence, true);
     if (ok) ++forwarded;
     Serial.print("SRCROUTE relay 0x"); printHex16(nwk.srcShort);
     Serial.print("->0x"); printHex16(nwk.dstShort);
@@ -1405,16 +1406,15 @@ void serviceSourceRoute() {
   if (IS_COORDINATOR && srCount > 0 && (int32_t)(millis() - nextSrTxAt) >= 0) {
     nextSrTxAt = millis() + 8000;
     const char msg[] = "SR-ping";
-    uint8_t out[ZigbeeNwk::kMaxFrame + 24];
-    uint8_t n = ZigbeeNwk::buildDataFrameSourceRouted(
-        out, sizeof(out), srDst, network.info().nwkAddress,
-        ZigbeeNwk::kDefaultRadius, srSeq++, srRelays, srCount, 0,
-        (const uint8_t*)msg, 7);
-    bool ok = n > 0 && radio.sendData(network.info().panId, srRelays[0],
-                                      network.info().nwkAddress, out, n, true);
+    // NWK-secured source-routed origination: relayIndex 0, MAC dest = relays[0].
+    // The relay-index byte is excluded from the CCM* AAD so each hop can bump it.
+    bool ok = radio.sendNwkDataSourceRouted(
+        network.info().panId, srRelays[0], network.info().nwkAddress, srDst,
+        network.info().nwkAddress, srRelays, srCount, /*relayIndex=*/0,
+        (const uint8_t*)msg, 7, ZigbeeNwk::kDefaultRadius, srSeq++, true);
     Serial.print("SRCROUTE tx -> 0x"); printHex16(srDst);
     Serial.print(" via 0x"); printHex16(srRelays[0]);
-    Serial.println(ok ? "" : " FAILED");
+    Serial.println(ok ? " (secured)" : " FAILED");
   }
 }
 #endif

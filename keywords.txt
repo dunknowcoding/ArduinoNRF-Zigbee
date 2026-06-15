@@ -147,6 +147,7 @@ setOn	KEYWORD2
 applyCommand	KEYWORD2
 buildReadAttributesResponse	KEYWORD2
 buildReadAttributesResponsePayload	KEYWORD2
+sendNwkDataSourceRouted	KEYWORD2
 appendReadAttributeRecord	KEYWORD2
 buildReport	KEYWORD2
 buildCommandResponse	KEYWORD2

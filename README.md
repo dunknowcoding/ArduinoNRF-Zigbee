@@ -57,7 +57,7 @@ device, or Green Power sink. All four shapes below are verified on hardware
 | **3-hop line** board1→board2→board3→board4 | `-DNIUS_ZIGBEE_LINE_TOPO=1` | APS-acked data across 3 hops and back at **100%** (`aps[q=15 ok=15 drop=0]`) |
 | **2×2 mesh + route repair** | `-DNIUS_ZIGBEE_MESH_TOPO=1` | board2/board3 redundant routers; board4 self-heals onto the other router when its parent is silenced |
 | **Mesh + Green Power** | `-DNIUS_ZIGBEE_GP_SINK=1` | board1 runs the mesh **and** sinks board5's battery-less Green Power frames |
-| **Source-route OTA** | `-DNIUS_ZIGBEE_SOURCEROUTE=1` | board4's Route Record walks up the line; board1 source-routes a frame back down |
+| **Source-route OTA** (NWK-secured) | `-DNIUS_ZIGBEE_SOURCEROUTE=1` | board4's Route Record walks up the line; board1 source-routes a frame back down, secured per hop with the relay index AAD-excluded |
 
 > board4/board5 are **nice!nano v2 (S140)** boards — the SoftDevice sits dormant,
 > the hardware AES is free, and the full stack runs identically to the
@@ -184,12 +184,14 @@ discovery + management + binding · the ZCL clusters above (On/Off, Level, Color
 Thermostat, Window Covering, Door Lock, IAS Zone, Occupancy, Temperature /
 Humidity / Electrical Measurement, OTA) + Green Power).
 
-It is **not** certified Zigbee PRO (that needs the official test harness), and a
-couple of refinements remain — chiefly NWK security AAD over the mutable
-source-route relay index (to secure source-routed frames on air) and setting the
-ack frame-pending bit for sleepy children (needs CC2530 firmware support). A
-future ZNP / Z-Stack backend can still live beside the raw driver. Milestone
-status: [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
+It is **not** certified Zigbee PRO (that needs the official test harness). Source-
+routed frames are now NWK-secured on air — the mutable relay-index byte is
+excluded from the CCM* AAD, so a relay can advance it and re-secure under its own
+aux header without breaking the MIC (`radio.sendNwkDataSourceRouted()`; verified
+14/14 by `CC2530_SourceRouteSecurity` on board1). The one remaining firmware-side
+refinement is setting the ack frame-pending bit for sleepy children (needs CC2530
+firmware support). A future ZNP / Z-Stack backend can still live beside the raw
+driver. Milestone status: [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules
 
