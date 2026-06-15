@@ -253,6 +253,16 @@ uint32_t apsSeq = 0, nextApsSendAt = 0;
 // end device assumes its parent is gone and re-scans (route repair).
 uint32_t lastApsOkAt = 0;
 
+#if NIUS_ZIGBEE_SOURCEROUTE
+// Concentrator (A) source-route state: the path A->...->D learned from D's route
+// record, and timers for D's route-record send + A's source-routed transmits.
+uint16_t srRelays[8];
+uint8_t srCount = 0;
+uint16_t srDst = 0xFFFF;
+uint8_t srSeq = 0;
+uint32_t nextSrRecordAt = 0, nextSrTxAt = 0;
+#endif
+
 #if NIUS_ZIGBEE_SECURE_JOIN
 // Secure-join key transport. The key-transport command rides an APS data frame
 // on a reserved endpoint/cluster, NWK-unsecured, with the APS payload being the
@@ -649,6 +659,38 @@ void onNwkCommand(const MacDataFrame& mac, const NwkCommandFrame& nwk,
     return;
   }
 
+#if NIUS_ZIGBEE_SOURCEROUTE
+  // Route record: collected at the concentrator (the relay list = the path from
+  // the originator up to here); each relay appends itself and forwards toward A.
+  if (nwk.commandId == NWK_CMD_ROUTE_RECORD && network.isJoined()) {
+    NwkRouteRecordCommand rec;
+    if (!ZigbeeNwk::parseRouteRecordPayload(nwk.payload, nwk.payloadLen, rec)) return;
+    uint16_t relays[8];
+    uint8_t rc = rec.relayCount < 7 ? rec.relayCount : 7;
+    for (uint8_t i = 0; i < rc; ++i) ZigbeeNwk::getRouteRecordRelay(rec, i, relays[i]);
+    if (IS_COORDINATOR) {
+      srDst = nwk.srcShort;
+      srCount = rc;
+      for (uint8_t i = 0; i < rc; ++i) srRelays[i] = relays[rc - 1 - i];  // reverse: A->D
+      Serial.print("ROUTE RECORD from 0x"); printHex16(nwk.srcShort);
+      Serial.print(" path A->dst:");
+      for (uint8_t i = 0; i < srCount; ++i) { Serial.print(" 0x"); printHex16(srRelays[i]); }
+      Serial.println();
+    } else {
+      if (rc < 7) relays[rc++] = network.info().nwkAddress;  // append self
+      uint8_t out[40];
+      uint8_t n = ZigbeeNwk::buildRouteRecordPayload(out, sizeof(out), relays, rc);
+      uint16_t nh = routing.nextHopFor(ZB_NWK_ADDR_COORDINATOR);
+      if (nh == ZigbeeRouting::kNoNextHop) nh = network.info().parentAddress;
+      radio.sendNwkCommand(network.info().panId, nh, network.info().nwkAddress,
+                           ZB_NWK_ADDR_COORDINATOR, nwk.srcShort,
+                           NWK_CMD_ROUTE_RECORD, out, n, ZigbeeNwk::kDefaultRadius,
+                           false);
+    }
+    return;
+  }
+#endif
+
   if (nwk.commandId == NWK_CMD_ROUTE_REQUEST && network.isJoined()) {
     NwkRouteRequestCommand rreq;
     if (!ZigbeeNwk::parseRouteRequestPayload(nwk.payload, nwk.payloadLen, rreq)) return;
@@ -738,6 +780,13 @@ void onNwkData(const MacDataFrame& mac, const NwkDataFrame& nwk, int8_t rssi,
   // Source-route relaying: if the frame carries a source-route subframe, follow
   // it (next hop named in the frame) rather than the route table. The frame is
   // rebuilt with the advanced relay index and forwarded unsecured.
+  if (nwk.sourceRoute && nwk.dstShort == network.info().nwkAddress) {
+    Serial.print("SRCROUTE delivered from 0x"); printHex16(nwk.srcShort);
+    Serial.print(" \"");
+    for (uint8_t i = 0; i < nwk.payloadLen; ++i) Serial.print((char)nwk.payload[i]);
+    Serial.println("\"");
+    return;
+  }
   if (nwk.sourceRoute && nwk.dstShort != network.info().nwkAddress) {
     uint16_t nextHop = 0;
     uint8_t outIdx = 0;
@@ -1330,12 +1379,50 @@ void setup() {
   }
 }
 
+#if NIUS_ZIGBEE_SOURCEROUTE
+void serviceSourceRoute() {
+  if (!network.isJoined()) return;
+  // D (end device): send a route record up so the concentrator learns the full
+  // path D->...->A and can source-route back down.
+  if (ROLE_END && (int32_t)(millis() - nextSrRecordAt) >= 0) {
+    nextSrRecordAt = millis() + 12000;
+    uint8_t rr[8];
+    uint8_t n = ZigbeeNwk::buildRouteRecordPayload(rr, sizeof(rr), nullptr, 0);
+    uint16_t nh = routing.nextHopFor(ZB_NWK_ADDR_COORDINATOR);
+    if (nh == ZigbeeRouting::kNoNextHop) nh = network.info().parentAddress;
+    bool ok = n > 0 && radio.sendNwkCommand(
+        network.info().panId, nh, network.info().nwkAddress,
+        ZB_NWK_ADDR_COORDINATOR, network.info().nwkAddress, NWK_CMD_ROUTE_RECORD,
+        rr, n, ZigbeeNwk::kDefaultRadius, false);
+    Serial.println(ok ? "route record -> coordinator" : "route record FAILED");
+  }
+  // A (concentrator): once it has a path, source-route a frame down to D.
+  if (IS_COORDINATOR && srCount > 0 && (int32_t)(millis() - nextSrTxAt) >= 0) {
+    nextSrTxAt = millis() + 8000;
+    const char msg[] = "SR-ping";
+    uint8_t out[ZigbeeNwk::kMaxFrame + 24];
+    uint8_t n = ZigbeeNwk::buildDataFrameSourceRouted(
+        out, sizeof(out), srDst, network.info().nwkAddress,
+        ZigbeeNwk::kDefaultRadius, srSeq++, srRelays, srCount, 0,
+        (const uint8_t*)msg, 7);
+    bool ok = n > 0 && radio.sendData(network.info().panId, srRelays[0],
+                                      network.info().nwkAddress, out, n, true);
+    Serial.print("SRCROUTE tx -> 0x"); printHex16(srDst);
+    Serial.print(" via 0x"); printHex16(srRelays[0]);
+    Serial.println(ok ? "" : " FAILED");
+  }
+}
+#endif
+
 void loop() {
   radio.poll();
   serviceLinkStatusAndAging();
   serviceRouteDiscovery();
   sendPendingMgmtLqiRsp();   // answer a recorded Mgmt_Lqi_req while radio idle
   serviceApsRetx();          // retransmit any acked frame whose ACK is overdue
+#if NIUS_ZIGBEE_SOURCEROUTE
+  serviceSourceRoute();
+#endif
 #if NIUS_ZIGBEE_SECURE_JOIN
   serviceKeyTransport();     // TC: deliver the network key to a new joiner
 #endif

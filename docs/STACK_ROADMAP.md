@@ -409,11 +409,14 @@ while preserving the existing raw send / receive / sniffer APIs.
    example: `CC2530_BeaconJoin -DNIUS_ZIGBEE_SOURCEROUTE=1` makes a router that
    receives a source-routed frame not addressed to it rebuild it with the
    advanced relay index and forward it to the next hop named in the subframe
-   (unsecured, via `radio.sendData`). What remains: a concentrator that
-   originates source-routed frames from collected Route Records, and NWK
-   security AAD over the (mutable-relay-index) subframe so secured frames can be
-   source-routed. Multi-board OTA verification needs a stable 2-hop bench (the
-   co-located radios only form one via the flaky range-sim).
+   (unsecured, via `radio.sendData`). **OTA-verified end to end on a 4-board
+   3-hop line** (A-B-C-D, `-DNIUS_ZIGBEE_LINE_TOPO=1 -DNIUS_ZIGBEE_SOURCEROUTE=1`):
+   the end device D sends a Route Record up to the concentrator A (each relay
+   appends itself), A learns the full path A->B->C->D and reverses it, then A
+   originates a source-routed data frame down to D; B and C forward it by the
+   subframe's relay list (not a route lookup) and D delivers it
+   (`SRCROUTE delivered from 0x0000 "SR-ping"`). What remains: NWK security AAD
+   over the (mutable-relay-index) subframe so secured frames can be source-routed.
 10. **Install codes** - DONE (derivation + self-test). `ZigbeeInstallCode`
     validates an install code's CRC (CRC-16/X-25, checked against the standard
     "123456789" -> 0x906E vector), builds a code from a body, and derives the
