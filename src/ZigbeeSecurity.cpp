@@ -43,6 +43,21 @@ inline void setNwkSecurityBit(uint8_t* npdu, bool on) {
   }
 }
 
+// Offset of the source-route relay-index byte within a NWK header, or 0 if the
+// frame is not source-routed. The relay index is rewritten at every hop, so it
+// must be excluded (zeroed) from the CCM* AAD - otherwise relaying a secured
+// source-routed frame would break the MIC.
+inline uint8_t srRelayIndexOffset(const uint8_t* hdr, uint8_t headerLen) {
+  uint16_t fcf = (uint16_t)hdr[0] | ((uint16_t)hdr[1] << 8);
+  if (!(fcf & (1u << 10))) return 0;
+  uint8_t off = 8;
+  if (fcf & (1u << 11)) off += 8;  // dst IEEE
+  if (fcf & (1u << 12)) off += 8;  // src IEEE
+  if (fcf & (1u << 8)) off += 1;   // multicast control
+  off += 1;                        // 2nd subframe byte (after the relay count)
+  return (off < headerLen) ? off : 0;
+}
+
 }  // namespace
 
 ZigbeeSecurity::ZigbeeSecurity()
@@ -163,6 +178,7 @@ uint8_t ZigbeeSecurity::secureNpdu(const uint8_t* npdu, uint8_t npduLen,
   memcpy(aadBuf, out, headerLen);
   memcpy(&aadBuf[headerLen], aux, kAuxLen);
   aadBuf[headerLen] = controlCrypto;
+  { uint8_t sr = srRelayIndexOffset(aadBuf, headerLen); if (sr) aadBuf[sr] = 0; }
 
   uint8_t* cipher = &out[headerLen + kAuxLen];
   uint8_t mic[kMicLen];
@@ -250,6 +266,7 @@ uint8_t ZigbeeSecurity::openNpdu(const uint8_t* npdu, uint8_t npduLen,
   memcpy(&aadBuf[headerLen], aux, kAuxLen);
   setNwkSecurityBit(aadBuf, true);  // AAD carries the on-air header
   aadBuf[headerLen] = controlCrypto;
+  { uint8_t sr = srRelayIndexOffset(aadBuf, headerLen); if (sr) aadBuf[sr] = 0; }
 
   const uint8_t* mic = &npdu[npduLen - kMicLen];
   if (!ccmStarCrypt(false, useKey, kMicLen, nonce, aadBuf, aadLen, plain,

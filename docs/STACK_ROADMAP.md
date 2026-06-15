@@ -217,9 +217,13 @@ while preserving the existing raw send / receive / sniffer APIs.
 > - **M6 Device abstraction** - `ZigbeeLight` ties On/Off + Level + Color +
 >   Identify + Groups + Scenes into one device; `ZigbeeIasZoneCluster` sensor
 >   (14/14).
-> Remaining beyond this batch: fully-secured multi-hop source routing (mutable
-> relay index excluded from the CCM* AAD) and more HA clusters; plus multi-board
-> OTA verification of source routing on a stable 2-hop bench. The **OTA Upgrade
+> Remaining beyond this batch: more HA clusters; plus multi-board OTA
+> verification of source routing on a stable 2-hop bench. **Fully-secured
+> multi-hop source routing is now DONE:** secureNpdu/openNpdu zero the mutable
+> relay-index byte in the CCM* AAD, so a relay can rewrite it without breaking
+> the MIC while the rest of the NWK header stays authenticated
+> (CC2530_SourceRouting verifies this: secure -> change relay index -> still
+> decrypts; a changed destination still fails). The **OTA Upgrade
 > cluster** (0x0019) is now DONE: `ZigbeeOtaCluster` builds/parses Query Next
 > Image, Image Block, and Upgrade End (request + response); `CC2530_OtaUpgrade`
 > self-tests a full image transfer 8/8 (query -> block download -> reassemble

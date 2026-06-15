@@ -230,6 +230,47 @@ void testOrigination() {
         "first relay forwards toward the next relay");
 }
 
+void testSecuredSourceRoute() {
+  Serial.println("Secured source-routed frame (mutable relay index):");
+  const uint16_t relays[2] = {0x0002, 0x0009};
+  uint8_t npdu[48];
+  uint8_t n = ZigbeeNwk::buildDataFrameSourceRouted(npdu, sizeof(npdu), 0x0031,
+                                                    0x0000, 30, 1, relays, 2, 0,
+                                                    (const uint8_t*)"secure", 6);
+  uint8_t headerLen = (uint8_t)(8 + 2 + 2 * 2);  // base + subframe(count+index+2 relays)
+
+  ZigbeeSecurity sec;
+  uint8_t key[16]; for (uint8_t i = 0; i < 16; ++i) key[i] = (uint8_t)(0xC0 + i);
+  sec.setNetworkKey(key, 0);
+
+  uint8_t secured[80];
+  uint8_t sn = sec.secureNpdu(npdu, n, headerLen, 0x1A62195E00000000ULL, 1,
+                              secured, sizeof(secured));
+  check(sn > 0, "secure a source-routed NPDU");
+
+  // Baseline: it opens.
+  uint8_t out[64];
+  sec.resetReplayTable();
+  check(sec.openNpdu(secured, sn, headerLen, out, sizeof(out)) > 0,
+        "opens before any relay touches it");
+
+  // A relay rewrites the mutable relay index (byte 9). The frame must still
+  // decrypt - the index is excluded from the CCM* AAD.
+  uint8_t relayed[80]; memcpy(relayed, secured, sn);
+  relayed[9] = 1;  // advance the relay index
+  sec.resetReplayTable();
+  uint8_t rn = sec.openNpdu(relayed, sn, headerLen, out, sizeof(out));
+  check(rn > 0, "still decrypts after the relay index is changed");
+  check(rn > 0 && out[9] == 1, "the new relay index is delivered");
+
+  // But the rest of the header is still authenticated: change the destination.
+  uint8_t tampered[80]; memcpy(tampered, secured, sn);
+  tampered[2] ^= 0x01;  // destination short address (in the base header)
+  sec.resetReplayTable();
+  check(sec.openNpdu(tampered, sn, headerLen, out, sizeof(out)) == 0,
+        "a changed destination still fails the MIC");
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial && millis() < 3000) {}
@@ -241,6 +282,7 @@ void setup() {
   testSourceRoutedFrame();
   testForwarding();
   testOrigination();
+  testSecuredSourceRoute();
 
   Serial.print("RESULT: "); Serial.print(passes); Serial.print(" passed, ");
   Serial.print(fails); Serial.println(" failed");
