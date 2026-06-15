@@ -46,8 +46,14 @@
 #include "ZigbeeAes128Decrypt.h"
 #include "ZigbeeTouchlink.h"
 #include "ZigbeeGreenPower.h"
+#include "ZigbeeInterPan.h"
 
 using nzb::CC2530Radio;
+using nzb::ZigbeeInterPan;
+using nzb::InterPanFrame;
+using nzb::INTERPAN_UNICAST;
+using nzb::INTERPAN_BROADCAST;
+using nzb::INTERPAN_GROUP;
 using nzb::ZigbeeAes128Decrypt;
 using nzb::ZigbeeTouchlink;
 using nzb::ZllScanResponse;

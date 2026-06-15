@@ -494,3 +494,14 @@ while preserving the existing raw send / receive / sniffer APIs.
     encrypted on the wire, tamper + wrong-key rejected), and a sink decrypting
     and accepting a live GPD frame. What remains: GP proxy forwarding and the GP
     sink ZCL cluster (0x0021) to commission GPDs from the network side.
+
+15. **Inter-PAN transmission** - DONE. `ZigbeeInterPan` builds/parses the
+    inter-PAN APDU - a one-octet stub NWK header (0x0B: frame type inter-PAN,
+    protocol version 2) + a stripped APS header (frame control + optional group
+    address + cluster + profile) + the command - the MAC payload that carries
+    commissioning traffic (touchlink scans) before a device has joined a
+    network. `CC2530_InterPan` self-tests it 9/9 on hardware, including a real
+    touchlink Scan Request wrapped in an inter-PAN broadcast and recovered. This
+    is the transmission layer touchlink (M13/#13) and Green Power scanning ride
+    on; the remaining step is the MAC-level inter-PAN addressing (IEEE source,
+    broadcast PAN 0xFFFF) on the radio.
