@@ -50,8 +50,15 @@
 #ifndef NIUS_ZIGBEE_LINE_TOPO
 #define NIUS_ZIGBEE_LINE_TOPO 0
 #endif
+// 2x2 mesh (-DNIUS_ZIGBEE_MESH_TOPO=1): A coordinator, B and C BOTH routers under
+// A (redundant depth-1 parents), D end device that joins one of them and
+// self-heals onto the other if its parent goes silent (route repair test).
+#ifndef NIUS_ZIGBEE_MESH_TOPO
+#define NIUS_ZIGBEE_MESH_TOPO 0
+#endif
+#define MULTI_TOPO (NIUS_ZIGBEE_LINE_TOPO || NIUS_ZIGBEE_MESH_TOPO)
 
-#if NIUS_ZIGBEE_LINE_TOPO
+#if MULTI_TOPO
 #define ROLE_COORD  (NIUS_ZIGBEE_THIS_NODE == 0x0001)
 #define ROLE_ROUTER (NIUS_ZIGBEE_THIS_NODE == 0x0002 || NIUS_ZIGBEE_THIS_NODE == 0x0003)
 #define ROLE_END    (NIUS_ZIGBEE_THIS_NODE == 0x0004)
@@ -111,7 +118,7 @@ static const uint8_t JOINER_CAPABILITY = ROLE_END ? 0x88 : 0x8A;
 //   A pool 0x0001..0x000F -> B gets 0x0001
 //   B pool 0x0031..0x003F -> C gets 0x0031
 static const uint16_t COORD_POOL_FIRST = 0x0001, COORD_POOL_LAST = 0x000F;
-#if NIUS_ZIGBEE_LINE_TOPO && (NIUS_ZIGBEE_THIS_NODE == 0x0003)
+#if MULTI_TOPO && (NIUS_ZIGBEE_THIS_NODE == 0x0003)
 static const uint16_t ROUTER_POOL_FIRST = 0x0061, ROUTER_POOL_LAST = 0x006F;  // C's pool
 #else
 static const uint16_t ROUTER_POOL_FIRST = 0x0031, ROUTER_POOL_LAST = 0x003F;  // B's pool
@@ -124,6 +131,19 @@ static const uint16_t EXPECTED_C_ADDR = 0x0031;
 #if defined(NIUS_ZIGBEE_NO_RANGE_SIM)
 static const uint16_t IGNORE_SHORTS[] = {0xFFFF};
 static const uint64_t IGNORE_IEEES[] = {0xFFFFFFFFFFFFFFFFULL};
+#elif NIUS_ZIGBEE_MESH_TOPO
+// 2x2 mesh: B and C both join A; D joins B or C. A accepts only B+C (ignores D's
+// association); D stays off A directly (the depth filter also enforces this).
+#if ROLE_COORD                                   // A: accept B, C; ignore D
+static const uint16_t IGNORE_SHORTS[] = {0xFFFF};
+static const uint64_t IGNORE_IEEES[] = {0x1A62195E00000004ULL};
+#elif (NIUS_ZIGBEE_THIS_NODE == 0x0004)          // D: do not join A directly
+static const uint16_t IGNORE_SHORTS[] = {0x0000};
+static const uint64_t IGNORE_IEEES[] = {0x1A62195E00000001ULL};
+#else                                            // B, C: hear everyone, accept D
+static const uint16_t IGNORE_SHORTS[] = {0xFFFF};
+static const uint64_t IGNORE_IEEES[] = {0xFFFFFFFFFFFFFFFFULL};
+#endif
 #elif NIUS_ZIGBEE_LINE_TOPO
 // line A(0x0000)-B(0x0001)-C(0x0031)-D(0x0061): each hears only its neighbors.
 #if ROLE_COORD                                   // A: ignore C, D
@@ -151,17 +171,17 @@ static const uint64_t IGNORE_IEEES[] = {0xFFFFFFFFFFFFFFFFULL};
 #endif
 static const uint8_t IGNORE_COUNT = sizeof(IGNORE_SHORTS) / sizeof(IGNORE_SHORTS[0]);
 
-#if NIUS_ZIGBEE_LINE_TOPO
-// Each line node joins a parent at exactly this depth (B<-A depth 0, C<-B
-// depth 1, D<-C depth 2), so the chain forms deterministically regardless of
-// the pool-assigned short addresses. Paired with the IEEE association-ignore
-// lists (A accepts only B, B only C, C only D), this gives a clean 3-hop line.
+#if MULTI_TOPO
+// Each node joins a parent at exactly this depth, so the topology forms
+// deterministically regardless of the pool-assigned short addresses (paired with
+// the IEEE association-ignore lists). LINE: B<-A(0) C<-B(1) D<-C(2). MESH 2x2:
+// B<-A(0) C<-A(0) D<-B/C(1).
 #if (NIUS_ZIGBEE_THIS_NODE == 0x0002)
-static const uint8_t LINE_PARENT_DEPTH = 0;
+static const uint8_t LINE_PARENT_DEPTH = 0;                       // B <- A
 #elif (NIUS_ZIGBEE_THIS_NODE == 0x0003)
-static const uint8_t LINE_PARENT_DEPTH = 1;
+static const uint8_t LINE_PARENT_DEPTH = NIUS_ZIGBEE_MESH_TOPO ? 0 : 1;  // C <- A or B
 #else  // 0x0004 (D)
-static const uint8_t LINE_PARENT_DEPTH = 2;
+static const uint8_t LINE_PARENT_DEPTH = NIUS_ZIGBEE_MESH_TOPO ? 1 : 2;  // D <- B/C or C
 #endif
 #endif
 
@@ -221,6 +241,9 @@ static const uint16_t APS_CLUSTER = 0x1042;   // a private test cluster
 static const uint16_t APS_PROFILE = 0x0104;   // Home Automation
 uint8_t apsCounter = 0;
 uint32_t apsSeq = 0, nextApsSendAt = 0;
+// Last time an APS delivery to the coordinator succeeded; if this goes stale the
+// end device assumes its parent is gone and re-scans (route repair).
+uint32_t lastApsOkAt = 0;
 
 #if NIUS_ZIGBEE_SECURE_JOIN
 // Secure-join key transport. The key-transport command rides an APS data frame
@@ -419,6 +442,7 @@ void onMacCommand(const MacCommandFrame& frame, int8_t rssi, uint8_t lqi) {
       printHex16(response.shortAddress);
       Serial.println();
       announced = false;
+      lastApsOkAt = millis();  // start the route-repair grace period from join
     }
   }
 }
@@ -430,8 +454,8 @@ void onBeacon(const MacBeaconFrame& beacon, int8_t rssi, uint8_t lqi) {
   if (ignoredShort(beacon.srcShort)) return;  // simulated out of range
   NwkBeaconPayload payload;
   if (!ZigbeeNwk::parseBeaconPayload(beacon.payload, beacon.payloadLen, payload)) return;
-#if NIUS_ZIGBEE_LINE_TOPO
-  if (payload.deviceDepth != LINE_PARENT_DEPTH) return;  // join only the line parent
+#if MULTI_TOPO
+  if (payload.deviceDepth != LINE_PARENT_DEPTH) return;  // join only the topology parent
 #endif
   if (network.noteBeacon(scanChannel, beacon, payload, rssi, lqi & 0x7F)) {
     Serial.print("  beacon ch=");
@@ -844,6 +868,7 @@ void onApsAck(const MacDataFrame& mac, const NwkDataFrame& nwk,
   // data plane (cluster APS_CLUSTER, endpoint APS_ENDPOINT) and the acked
   // Mgmt_Lqi_rsp (cluster 0x8031, ZDO endpoint 0) clear here.
   if (apsRetx.onAck(ack.counter, ack.dstEndpoint)) {
+    lastApsOkAt = millis();  // delivery succeeded - our path to the coord is alive
     Serial.print("APS ACK ok cnt="); Serial.print(ack.counter);
     Serial.print(" (delivered "); Serial.print(apsRetx.stats().delivered);
     Serial.print("/"); Serial.print(apsRetx.stats().queued);
@@ -858,6 +883,18 @@ void serviceRouteDiscovery() {
 #if NIUS_ZIGBEE_SECURE_JOIN
   if (!keyInstalled) return;  // no secured traffic until the network key arrives
 #endif
+
+  // End-device route repair: if deliveries to the coordinator have stalled for a
+  // while, our parent is probably gone - drop the stale route and re-scan for a
+  // new parent (in a 2x2 mesh, the surviving router takes over).
+  if (lastApsOkAt != 0 && (int32_t)(millis() - lastApsOkAt) > 25000) {
+    Serial.println("end-device route repair: APS to coord stalled - re-scanning");
+    routes.remove(ZB_NWK_ADDR_COORDINATOR);
+    lastApsOkAt = millis();  // grace period before another repair attempt
+    runActiveScan();
+    return;
+  }
+
   routing.expire();
 
   uint16_t target = ZB_NWK_ADDR_COORDINATOR;
