@@ -34,6 +34,7 @@
 #include "ZigbeeGroupsCluster.h"
 #include "ZigbeeLevelControlCluster.h"
 #include "ZigbeeIdentifyCluster.h"
+#include "ZigbeeScenesCluster.h"
 
 using nzb::CC2530Radio;
 using nzb::CC2530MacInfo;
@@ -144,6 +145,16 @@ using nzb::IDENTIFY_CMD_IDENTIFY;
 using nzb::IDENTIFY_CMD_QUERY;
 using nzb::IDENTIFY_CMD_TRIGGER_EFFECT;
 using nzb::IDENTIFY_EFFECT_BLINK;
+using nzb::ZigbeeSceneTable;
+using nzb::SceneEntry;
+using nzb::ZigbeeScenesCluster;
+using nzb::SCENES_CMD_STORE;
+using nzb::SCENES_CMD_RECALL;
+using nzb::SCENES_CMD_REMOVE;
+using nzb::SCENES_CMD_REMOVE_ALL;
+using nzb::SCENES_STATUS_SUCCESS;
+using nzb::SCENES_STATUS_NOT_FOUND;
+using nzb::SCENES_STATUS_INSUFFICIENT_SPACE;
 using nzb::GROUPS_CMD_ADD;
 using nzb::GROUPS_CMD_REMOVE;
 using nzb::GROUPS_CMD_REMOVE_ALL;

@@ -420,5 +420,10 @@ while preserving the existing raw send / receive / sniffer APIs.
     hardware. Identify (`ZigbeeIdentifyCluster`, 0x0003) is included: Identify /
     Identify Query Response / Trigger Effect payloads + the IdentifyTime
     countdown (apply / tick-per-second / isIdentifying) used during commissioning
-    to make a device blink; `CC2530_Identify` self-tests it 13/13. What remains
-    for a full ZCL library: Scenes, Color Control, and the other HA clusters.
+    to make a device blink; `CC2530_Identify` self-tests it 13/13. Scenes
+    (`ZigbeeScenesCluster` + `ZigbeeSceneTable`, 0x0005) stores a device snapshot
+    (On/Off + Level) per (group, scene) and handles Store / Recall / Remove /
+    Remove-All (Store captures the current state, Recall writes it back);
+    `CC2530_Scenes` self-tests it 17/17. The reusable cluster set is now Basic,
+    Identify, Groups, On/Off, Level Control, Scenes + boolean reporting. What
+    remains for a full ZCL library: Color Control and the other HA clusters.
