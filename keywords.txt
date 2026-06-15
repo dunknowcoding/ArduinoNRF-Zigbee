@@ -35,6 +35,7 @@ ZigbeeApsRetransmit	KEYWORD1
 ZigbeeApsDuplicateTable	KEYWORD1
 ZigbeeApsFragment	KEYWORD1
 ZigbeeApsReassembler	KEYWORD1
+ZigbeeApsFragmenter	KEYWORD1
 ZigbeeApsKey	KEYWORD1
 ZigbeeApsSecurity	KEYWORD1
 ZigbeeCcmStar	KEYWORD1

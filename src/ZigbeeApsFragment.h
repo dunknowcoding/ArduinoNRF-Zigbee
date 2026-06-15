@@ -183,6 +183,62 @@ class ZigbeeApsReassembler {
   bool got_[kMaxBlocks];
 };
 
+// Sender side: split one long APS payload into a sequence of fragment APDUs.
+// Iterate next() until done(); send each APDU (each is <= header + blockSize, so
+// it fits a single frame) via the radio. The first block carries the total
+// block count in its block number, matching ZigbeeApsReassembler.
+class ZigbeeApsFragmenter {
+ public:
+  void begin(const uint8_t* payload, uint16_t payloadLen, uint8_t blockSize,
+             uint8_t dstEndpoint, uint16_t clusterId, uint16_t profileId,
+             uint8_t srcEndpoint, uint8_t counter) {
+    payload_ = payload;
+    payloadLen_ = payloadLen;
+    blockSize_ = blockSize ? blockSize : 1;
+    dstEndpoint_ = dstEndpoint;
+    clusterId_ = clusterId;
+    profileId_ = profileId;
+    srcEndpoint_ = srcEndpoint;
+    counter_ = counter;
+    index_ = 0;
+    total_ = (uint8_t)((payloadLen_ + blockSize_ - 1) / blockSize_);
+    if (total_ == 0) total_ = 1;  // a zero-length ASDU is one empty block
+  }
+
+  uint8_t totalBlocks() const { return total_; }
+  bool done() const { return index_ >= total_; }
+
+  /** Build the next fragment APDU into @p out. @return its length, or 0 when
+      there are no more blocks (or on error). */
+  uint8_t next(uint8_t* out, uint8_t outMax, bool ackRequest = false) {
+    if (done() || !out) return 0;
+    uint16_t offset = (uint16_t)index_ * blockSize_;
+    uint8_t blockLen = (uint8_t)((payloadLen_ - offset) < blockSize_
+                                     ? (payloadLen_ - offset)
+                                     : blockSize_);
+    bool first = (index_ == 0);
+    // First block's block number carries the total count; the rest are indexed.
+    uint8_t blockNumber = first ? total_ : index_;
+    uint8_t n = ZigbeeApsFragment::buildFragment(
+        out, outMax, dstEndpoint_, clusterId_, profileId_, srcEndpoint_,
+        counter_, first, blockNumber, payload_ + offset, blockLen, ackRequest);
+    if (n > 0) ++index_;
+    return n;
+  }
+
+ private:
+  const uint8_t* payload_ = nullptr;
+  uint16_t payloadLen_ = 0;
+  uint8_t blockSize_ = 1;
+  uint8_t dstEndpoint_ = 0;
+  uint16_t clusterId_ = 0;
+  uint16_t profileId_ = 0;
+  uint8_t srcEndpoint_ = 0;
+  uint8_t counter_ = 0;
+  uint8_t index_ = 0;
+  uint8_t total_ = 0;
+};
+
 }  // namespace nzb
 
 #endif  // NIUS_ZIGBEE_APS_FRAGMENT_H

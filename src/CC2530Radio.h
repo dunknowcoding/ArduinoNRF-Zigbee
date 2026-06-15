@@ -108,6 +108,7 @@ using nzb::ZDO_UNBIND_RSP;
 using nzb::ZigbeeApsFragment;
 using nzb::ApsFragmentInfo;
 using nzb::ZigbeeApsReassembler;
+using nzb::ZigbeeApsFragmenter;
 using nzb::ZigbeeBroadcastTable;
 using nzb::BroadcastEntry;
 using nzb::ZigbeeIndirectQueue;
