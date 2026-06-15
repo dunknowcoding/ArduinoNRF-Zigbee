@@ -43,9 +43,13 @@
 #define NIUS_ZIGBEE_THIS_NODE 0x0001
 #endif
 
+// Node 0x0004 ("D") is a second end device, so a 4th board (e.g. a nice!nano)
+// can join the same mesh - either as another leaf, or as the tail of a
+// multi-hop line when the range-sim chains the nodes.
 #define ROLE_COORD  (NIUS_ZIGBEE_THIS_NODE == 0x0001)
 #define ROLE_ROUTER (NIUS_ZIGBEE_THIS_NODE == 0x0002)
-#define ROLE_END    (NIUS_ZIGBEE_THIS_NODE == 0x0003)
+#define ROLE_END    (NIUS_ZIGBEE_THIS_NODE == 0x0003 || NIUS_ZIGBEE_THIS_NODE == 0x0004)
+#define ROLE_END_D  (NIUS_ZIGBEE_THIS_NODE == 0x0004)
 
 // Secure commissioning (Zigbee-3.0-style key transport). When enabled, the
 // joiner starts with ONLY the default Trust Center link key "ZigBeeAlliance09"
@@ -221,7 +225,8 @@ static const uint32_t SAVE_PERIOD_MS = 20000;
 static const uint32_t COUNTER_MARGIN = 1024;
 
 const char* roleName() {
-  return ROLE_COORD ? "A/coordinator" : ROLE_ROUTER ? "B/router" : "C/end";
+  return ROLE_COORD ? "A/coordinator" : ROLE_ROUTER ? "B/router"
+       : ROLE_END_D ? "D/end" : "C/end";
 }
 
 bool ignoredShort(uint16_t macSrc) { return macSrc == IGNORE_PEER_SHORT; }
