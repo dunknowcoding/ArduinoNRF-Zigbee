@@ -218,6 +218,47 @@ class ZigbeeApsSecurity {
     return cipherLen;
   }
 
+  // ------------------------------------------- APS application-data encryption
+  /** End-to-end encrypt an APS DATA frame's application payload under a shared
+      link key (APS-layer security, distinct from the NWK-layer encryption every
+      frame already gets). @p apsFrame is a built APS data frame
+      (ZigbeeAps::buildDataFrame); @p headerLen is its header length (8 for a
+      unicast data frame). The output is the APS header (with the security bit
+      set) + the APS auxiliary header + the encrypted payload + MIC. @return the
+      secured length, or 0 on error. */
+  static uint8_t secureDataFrame(const uint8_t* apsFrame, uint8_t apsFrameLen,
+                                 uint8_t headerLen, const uint8_t key[16],
+                                 uint64_t srcIeee, uint32_t frameCounter,
+                                 uint8_t* out, uint8_t outMax) {
+    if (!apsFrame || apsFrameLen < headerLen) return 0;
+    uint8_t hdr[16];
+    if (headerLen > sizeof(hdr)) return 0;
+    memcpy(hdr, apsFrame, headerLen);
+    hdr[0] |= 0x20;  // APS frame control: security sub-field
+    return secureCommand(hdr, headerLen, key, APS_SEC_KEY_DATA, srcIeee,
+                         frameCounter, apsFrame + headerLen,
+                         (uint8_t)(apsFrameLen - headerLen), out, outMax);
+  }
+
+  /** Verify+decrypt a frame from secureDataFrame() back into a plain APS data
+      frame: the APS header (security bit cleared) + recovered payload. @return
+      the reconstructed APS data-frame length, or 0 on MIC failure. */
+  static uint8_t openDataFrame(const uint8_t* secured, uint8_t securedLen,
+                               uint8_t headerLen, const uint8_t key[16],
+                               uint8_t* out, uint8_t outMax,
+                               uint32_t* frameCounterOut = nullptr) {
+    if (!secured || securedLen < headerLen || headerLen > outMax) return 0;
+    uint8_t payload[96];
+    uint8_t n = openCommand(secured, securedLen, headerLen, key, payload,
+                            sizeof(payload), frameCounterOut, nullptr);
+    if (n == 0) return 0;
+    if ((uint16_t)(headerLen + n) > outMax) return 0;
+    memcpy(out, secured, headerLen);
+    out[0] &= (uint8_t)~0x20;  // clear the security bit in the recovered frame
+    memcpy(out + headerLen, payload, n);
+    return (uint8_t)(headerLen + n);
+  }
+
  private:
   // Security control byte: level(0-2) | keyId(3-4) | extNonce(5). Extended
   // nonce is always set here (the source IEEE is carried in the aux header).

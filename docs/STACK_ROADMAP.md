@@ -505,3 +505,14 @@ while preserving the existing raw send / receive / sniffer APIs.
     is the transmission layer touchlink (M13/#13) and Green Power scanning ride
     on; the remaining step is the MAC-level inter-PAN addressing (IEEE source,
     broadcast PAN 0xFFFF) on the radio.
+
+16. **APS application-data encryption** - DONE. On top of the NWK-layer
+    encryption every frame gets, `ZigbeeApsSecurity::secureDataFrame` /
+    `openDataFrame` add a second, end-to-end APS-layer envelope between two
+    devices that share a link key, so a relay (which holds the network key)
+    still cannot read the application payload. It sets the APS frame-control
+    security bit, inserts the APS auxiliary header, and encrypts the payload
+    under the link key (key id = data key) via the hardware-verified CCM* core.
+    `CC2530_ApsDataCrypt` self-tests it 10/10 on hardware: payload is ciphertext
+    on the wire, the frame counter is recovered, the original APS frame is
+    reconstructed, and tampered / wrong-key frames are rejected.
