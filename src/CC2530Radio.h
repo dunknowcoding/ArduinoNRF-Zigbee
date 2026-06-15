@@ -47,6 +47,7 @@
 #include "ZigbeeTouchlink.h"
 #include "ZigbeeGreenPower.h"
 #include "ZigbeeInterPan.h"
+#include "ZigbeeBdb.h"
 
 using nzb::CC2530Radio;
 using nzb::ZigbeeInterPan;
@@ -54,6 +55,15 @@ using nzb::InterPanFrame;
 using nzb::INTERPAN_UNICAST;
 using nzb::INTERPAN_BROADCAST;
 using nzb::INTERPAN_GROUP;
+using nzb::ZigbeeBdb;
+using nzb::BDB_MODE_INITIATOR_TOUCHLINK;
+using nzb::BDB_MODE_NETWORK_STEERING;
+using nzb::BDB_MODE_NETWORK_FORMATION;
+using nzb::BDB_MODE_FINDING_BINDING;
+using nzb::BDB_STATUS_SUCCESS;
+using nzb::BDB_STATUS_NO_NETWORK;
+using nzb::BDB_STATUS_NO_IDENTIFY_QUERY_RESPONSE;
+using nzb::BDB_DONE;
 using nzb::ZigbeeAes128Decrypt;
 using nzb::ZigbeeTouchlink;
 using nzb::ZllScanResponse;

@@ -516,3 +516,16 @@ while preserving the existing raw send / receive / sniffer APIs.
     `CC2530_ApsDataCrypt` self-tests it 10/10 on hardware: payload is ciphertext
     on the wire, the frame counter is recovered, the original APS frame is
     reconstructed, and tampered / wrong-key frames are rejected.
+
+17. **BDB commissioning state machine** - DONE. `ZigbeeBdb` is the Base Device
+    Behaviour orchestration layer: the app requests a bitmask of commissioning
+    modes and the state machine runs them in the fixed Zigbee 3.0 precedence
+    order (touchlink -> network steering -> network formation -> finding &
+    binding), handing one mode at a time to the host (which performs the actual
+    step with the rest of the stack) and collecting the status. A failed network
+    step (steering/formation) ends commissioning - there is no network to do
+    finding & binding on. `CC2530_Bdb` self-tests it 16/16 on hardware:
+    coordinator (form + F&B), router (steer + F&B), full four-mode precedence,
+    no-network abort, and a finding & binding failure path. This ties the
+    individual commissioning pieces (M5 finding & binding, M7 touchlink,
+    formation/steering) into one procedure with one result.
