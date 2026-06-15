@@ -132,6 +132,58 @@ uint8_t ZigbeeZcl::buildUint8AttributeRecord(uint8_t* out, uint8_t outMax,
   return 5;
 }
 
+uint8_t ZigbeeZcl::buildUint16AttributeRecord(uint8_t* out, uint8_t outMax,
+                                              uint16_t attrId, uint16_t value) {
+  if (!out || outMax < 6) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = ZCL_STATUS_SUCCESS;
+  out[3] = ZCL_TYPE_UINT16;
+  writeLe16(&out[4], value);
+  return 6;
+}
+
+uint8_t ZigbeeZcl::buildInt16AttributeRecord(uint8_t* out, uint8_t outMax,
+                                             uint16_t attrId, int16_t value) {
+  if (!out || outMax < 6) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = ZCL_STATUS_SUCCESS;
+  out[3] = ZCL_TYPE_INT16;
+  writeLe16(&out[4], (uint16_t)value);
+  return 6;
+}
+
+uint8_t ZigbeeZcl::buildTyped8AttributeRecord(uint8_t* out, uint8_t outMax,
+                                              uint16_t attrId, uint8_t type,
+                                              uint8_t value) {
+  if (!out || outMax < 5) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = ZCL_STATUS_SUCCESS;
+  out[3] = type;
+  out[4] = value;
+  return 5;
+}
+
+uint8_t ZigbeeZcl::buildReportUint16AttributePayload(uint8_t* out,
+                                                     uint8_t outMax,
+                                                     uint16_t attrId,
+                                                     uint16_t value) {
+  if (!out || outMax < 5) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = ZCL_TYPE_UINT16;
+  writeLe16(&out[3], value);
+  return 5;
+}
+
+uint8_t ZigbeeZcl::buildReportInt16AttributePayload(uint8_t* out, uint8_t outMax,
+                                                    uint16_t attrId,
+                                                    int16_t value) {
+  if (!out || outMax < 5) return 0;
+  writeLe16(&out[0], attrId);
+  out[2] = ZCL_TYPE_INT16;
+  writeLe16(&out[3], (uint16_t)value);
+  return 5;
+}
+
 uint8_t ZigbeeZcl::buildCharStringAttributeRecord(uint8_t* out, uint8_t outMax,
                                                   uint16_t attrId,
                                                   const char* value) {

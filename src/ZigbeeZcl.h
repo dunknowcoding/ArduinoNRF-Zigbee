@@ -40,6 +40,7 @@ enum ZclOnOffCommandId : uint8_t {
 
 enum ZclStatus : uint8_t {
   ZCL_STATUS_SUCCESS = 0x00,
+  ZCL_STATUS_FAILURE = 0x01,
   ZCL_STATUS_UNSUPPORTED_CLUSTER_COMMAND = 0x81,
   ZCL_STATUS_UNSUPPORTED_GENERAL_COMMAND = 0x82,
   ZCL_STATUS_INVALID_FIELD = 0x85,
@@ -53,9 +54,13 @@ enum ZclReportDirection : uint8_t {
 };
 
 enum ZclDataType : uint8_t {
+  ZCL_TYPE_MAP8 = 0x18,
   ZCL_TYPE_BOOLEAN = 0x10,
   ZCL_TYPE_UINT8 = 0x20,
   ZCL_TYPE_UINT16 = 0x21,
+  ZCL_TYPE_INT8 = 0x28,
+  ZCL_TYPE_INT16 = 0x29,
+  ZCL_TYPE_ENUM8 = 0x30,
   ZCL_TYPE_CHAR_STRING = 0x42
 };
 
@@ -89,6 +94,11 @@ class ZigbeeZcl {
   static const uint16_t kClusterOtaUpgrade = 0x0019;
   static const uint16_t kClusterThermostat = 0x0201;
   static const uint16_t kClusterWindowCovering = 0x0102;
+  static const uint16_t kClusterDoorLock = 0x0101;
+  static const uint16_t kClusterTemperatureMeasurement = 0x0402;
+  static const uint16_t kClusterHumidityMeasurement = 0x0405;
+  static const uint16_t kClusterOccupancySensing = 0x0406;
+  static const uint16_t kClusterElectricalMeasurement = 0x0B04;
   static const uint16_t kAttrOnOff = 0x0000;
   static const uint16_t kAttrBasicZclVersion = 0x0000;
   static const uint16_t kAttrBasicApplicationVersion = 0x0001;
@@ -133,6 +143,29 @@ class ZigbeeZcl {
 
   static uint8_t buildUint8AttributeRecord(uint8_t* out, uint8_t outMax,
                                            uint16_t attrId, uint8_t value);
+
+  // 16-bit and explicitly-typed scalar Read-Attributes records (attrId + status
+  // + type + value), for measurement / sensor clusters.
+  static uint8_t buildUint16AttributeRecord(uint8_t* out, uint8_t outMax,
+                                            uint16_t attrId, uint16_t value);
+
+  static uint8_t buildInt16AttributeRecord(uint8_t* out, uint8_t outMax,
+                                           uint16_t attrId, int16_t value);
+
+  // 1-byte value with a caller-chosen type tag (ENUM8, MAP8, INT8, ...).
+  static uint8_t buildTyped8AttributeRecord(uint8_t* out, uint8_t outMax,
+                                            uint16_t attrId, uint8_t type,
+                                            uint8_t value);
+
+  // Report Attributes payloads (attrId + type + value, no status) for 16-bit
+  // scalars, mirroring buildReportBoolAttributePayload.
+  static uint8_t buildReportUint16AttributePayload(uint8_t* out, uint8_t outMax,
+                                                   uint16_t attrId,
+                                                   uint16_t value);
+
+  static uint8_t buildReportInt16AttributePayload(uint8_t* out, uint8_t outMax,
+                                                  uint16_t attrId,
+                                                  int16_t value);
 
   static uint8_t buildCharStringAttributeRecord(uint8_t* out, uint8_t outMax,
                                                 uint16_t attrId,

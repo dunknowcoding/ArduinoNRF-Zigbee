@@ -168,8 +168,11 @@ Layered on the MAC base; each piece ships with a hardware self-test example.
 - **Green Power.** `ZigbeeGreenPower` (GPDF + AES-CCM* + commissioning) +
   `ZigbeeGpSinkTable` (frame-counter replay protection).
 - **ZCL device clusters.** Basic, Identify, Groups, Scenes, On/Off, Level
-  Control, Color Control, Thermostat, Window Covering, IAS Zone, OTA Upgrade,
-  attribute reporting, and a `ZigbeeLight` device abstraction.
+  Control, Color Control, Thermostat, Window Covering, Door Lock, IAS Zone,
+  Occupancy Sensing, Temperature / Relative-Humidity / Electrical Measurement,
+  OTA Upgrade, attribute reporting, and a `ZigbeeLight` device abstraction. The
+  `CC2530_DeviceClusters` self-test exercises the lock + sensor clusters
+  (26/26 on board1).
 
 ## Current stack boundary
 
@@ -177,7 +180,9 @@ NiusZigbee implements essentially the full Zigbee 3.0 surface on top of the SDCC
 CC2530 MAC/PHY backend (MAC frames/association/filtering · NWK scan/join/route/
 source-route/security · APS acked delivery/fragmentation/groups/app encryption ·
 TC key transport + rotation + install codes + BDB/Touchlink commissioning · ZDO
-discovery + management + binding · the ZCL clusters above + Green Power).
+discovery + management + binding · the ZCL clusters above (On/Off, Level, Color,
+Thermostat, Window Covering, Door Lock, IAS Zone, Occupancy, Temperature /
+Humidity / Electrical Measurement, OTA) + Green Power).
 
 It is **not** certified Zigbee PRO (that needs the official test harness), and a
 couple of refinements remain — chiefly NWK security AAD over the mutable
