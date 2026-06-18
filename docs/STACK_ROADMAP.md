@@ -381,9 +381,17 @@ while preserving the existing raw send / receive / sniffer APIs.
    conflicting PAN ID list) and Network Update (0x0A, PAN ID update: options +
    EPID + nwkUpdateId + new PAN ID), with the 8-bit-wraparound update-id
    freshness test so every node adopts the manager's newest value.
-   `CC2530_PanIdConflict` self-tests it 16/16 on hardware. What remains: drive
-   detection from heard beacons, the manager's new-PAN-ID selection, and
-   applying the update (and the analogous channel-change propagation).
+   `CC2530_PanIdConflict` self-tests it 16/16 on hardware. **The integration is
+   now DONE:** `ZigbeeNetworkManager` drives detection from heard beacons
+   (`noteBeacon` records each PAN ID and flags a conflict), the manager's
+   new-PAN-ID selection (`selectNewPanId` avoids our PAN ID, all heard PAN IDs,
+   and the reserved 0x0000/0xFFFF), and applying an update (`applyUpdate` adopts a
+   PAN ID *or* channel change that is EPID-scoped and fresher by the update-id
+   half-window test; `commitPanId`/`commitChannel` for the manager's own side).
+   Channel-change propagation is added too (`buildChannelUpdate`/
+   `parseChannelUpdate`, NWK_UPDATE_CHANNEL). `CC2530_PanIdConflict` self-tests
+   the manager + channel update. Compiles clean; on-air drive from the live beacon
+   path in CC2530_BeaconJoin pending.
 8. **Multi-hop relay** - DONE (code): routers answer beacon requests and
    accept children from a disjoint address pool, NWK unicast data frames
    whose destination is not the receiver are forwarded to the route's next

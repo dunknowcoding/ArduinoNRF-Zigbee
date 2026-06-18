@@ -88,6 +88,72 @@ void testUpdate() {
   check(!ZigbeePanIdConflict::updateIdIsNewer(250, 2), "250 not newer than 2 (wrap)");
 }
 
+void testChannelUpdate() {
+  Serial.println("Network Update (channel change):");
+  NwkNetworkUpdate u;
+  u.updateType = NWK_UPDATE_CHANNEL;
+  u.extendedPanId = 0x1A62195E00000000ULL;
+  u.updateId = 7;
+  u.newChannel = 20;
+
+  uint8_t buf[16];
+  uint8_t n = ZigbeePanIdConflict::buildChannelUpdate(buf, sizeof(buf), u);
+  check(n == 11, "channel update length = 11 bytes");
+
+  NwkNetworkUpdate parsed;
+  check(ZigbeePanIdConflict::parseChannelUpdate(buf, n, parsed), "parse channel update");
+  check(parsed.updateType == NWK_UPDATE_CHANNEL && parsed.updateId == 7 &&
+            parsed.newChannel == 20 && parsed.extendedPanId == u.extendedPanId,
+        "round-trip type + update id + channel");
+}
+
+void testNetworkManager() {
+  Serial.println("Network manager (detect from beacon, select, apply):");
+  const uint64_t OUR_EPID = 0x1A62195E00000000ULL;
+  const uint64_t OTHER_EPID = 0xAABBCCDD00000000ULL;
+  ZigbeeNetworkManager mgr;
+  mgr.begin(0x1A62, OUR_EPID, /*channel=*/15, /*updateId=*/3);
+
+  // Our own beacon (same EPID) is not a conflict; a foreign one with our PAN ID is.
+  check(!mgr.noteBeacon(0x1A62, OUR_EPID), "our own beacon: no conflict");
+  check(mgr.noteBeacon(0x1A62, OTHER_EPID), "foreign beacon on our PAN ID: conflict");
+  mgr.noteBeacon(0x2222, OTHER_EPID);  // record another heard PAN ID
+
+  // The manager selects a fresh PAN ID that avoids ours and all heard PAN IDs.
+  uint16_t fresh = mgr.selectNewPanId(0x1A62);
+  check(fresh != 0x1A62 && fresh != 0x2222 && fresh != 0x0000 && fresh != 0xFFFF,
+        "selected PAN ID avoids ours, heard ones, and reserved");
+
+  // Announce a PAN ID change; a peer applies it (fresher update id, our EPID).
+  uint8_t buf[16];
+  uint8_t n = mgr.buildPanIdChange(buf, sizeof(buf), fresh);
+  NwkNetworkUpdate u;
+  check(ZigbeePanIdConflict::parseUpdate(buf, n, u) && u.updateId == 4 &&
+            u.newPanId == fresh,
+        "PAN ID change carries bumped update id (3 -> 4)");
+
+  ZigbeeNetworkManager peer;
+  peer.begin(0x1A62, OUR_EPID, 15, 3);
+  check(peer.applyUpdate(u) && peer.panId() == fresh && peer.nwkUpdateId() == 4,
+        "peer adopts the new PAN ID + update id");
+  // Replaying the same (now stale) update is ignored.
+  check(!peer.applyUpdate(u), "stale update (not newer) ignored");
+  // An update for a different network (EPID mismatch) is ignored.
+  NwkNetworkUpdate foreign = u; foreign.extendedPanId = OTHER_EPID; foreign.updateId = 9;
+  check(!peer.applyUpdate(foreign), "update for a different EPID ignored");
+
+  // The manager commits its own PAN ID change (its update id now matches 4).
+  mgr.commitPanId(fresh);
+  check(mgr.panId() == fresh && mgr.nwkUpdateId() == 4, "manager commits the PAN ID change");
+
+  // A channel change propagates the same way (next update id, 5).
+  uint8_t cn = mgr.buildChannelChange(buf, sizeof(buf), 25);
+  NwkNetworkUpdate cu;
+  check(ZigbeePanIdConflict::parseChannelUpdate(buf, cn, cu), "parse our channel change");
+  check(peer.applyUpdate(cu) && peer.channel() == 25,
+        "peer adopts the new channel");
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial && millis() < 3000) {}
@@ -96,6 +162,8 @@ void setup() {
   testDetection();
   testReport();
   testUpdate();
+  testChannelUpdate();
+  testNetworkManager();
 
   Serial.print("RESULT: "); Serial.print(passes); Serial.print(" passed, ");
   Serial.print(fails); Serial.println(" failed");
