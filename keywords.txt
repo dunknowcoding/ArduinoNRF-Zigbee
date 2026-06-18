@@ -68,6 +68,11 @@ ZigbeeElectricalMeasurementCluster	KEYWORD1
 ZigbeeTouchlink	KEYWORD1
 ZigbeeGreenPower	KEYWORD1
 ZigbeeGpSinkTable	KEYWORD1
+ZigbeeGreenPowerCluster	KEYWORD1
+ZigbeeGpProxy	KEYWORD1
+GpNotification	KEYWORD1
+GpPairing	KEYWORD1
+GpProxyEntry	KEYWORD1
 ZigbeeInterPan	KEYWORD1
 ZigbeeBdb	KEYWORD1
 ZigbeeAes128Decrypt	KEYWORD1

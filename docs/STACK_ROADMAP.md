@@ -500,9 +500,22 @@ while preserving the existing raw send / receive / sniffer APIs.
     NO network join broadcasts a secured Toggle GPDF (encrypted command,
     advancing frame counter) every 3 s on a raw 802.15.4 broadcast, and the sink
     parses + decrypts it (mic ok), rejects replays (monotonic counter), and
-    toggles its built-in LED - confirmed alternating LED=ON/OFF on hardware. What
-    remains: GP proxy forwarding and the GP sink ZCL cluster (0x0021) to
-    commission GPDs from the network side.
+    toggles its built-in LED - confirmed alternating LED=ON/OFF on hardware.
+    **GP proxy forwarding + the GP cluster (0x0021) are now DONE.**
+    `ZigbeeGreenPowerCluster` builds/parses the network-side GP cluster commands -
+    GP Notification (0x00) and GP Commissioning Notification (0x04) proxy->sink,
+    and GP Pairing (0x01) sink->proxy - on the GP endpoint (242) / ZGP profile
+    (0xA1E0), and provides sink-side handlers that commission a GPD from a
+    Commissioning Notification and verify+decrypt an operational Notification
+    against the sink table. `ZigbeeGpProxy` turns an overheard raw GPDF into the
+    right GP cluster payload (a secured operational frame is forwarded as
+    ciphertext + MIC so the proxy needs no key; the sink reconstructs the
+    deterministic secured-GPDF header and opens it), with per-GPD frame-counter
+    duplicate suppression. `CC2530_GreenPowerCluster` self-tests the build/parse
+    round trips, commissioning-through-proxy, secured operational decrypt at the
+    sink, replay/dup rejection, and a tampered-MIC rejection (16 checks; compiles
+    clean, HW bench run pending). What remains: a GP Response (0x06) downlink path
+    and a certified GP reference vector.
 
 15. **Inter-PAN transmission** - DONE. `ZigbeeInterPan` builds/parses the
     inter-PAN APDU - a one-octet stub NWK header (0x0B: frame type inter-PAN,

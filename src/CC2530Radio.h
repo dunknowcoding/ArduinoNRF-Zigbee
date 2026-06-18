@@ -46,6 +46,8 @@
 #include "ZigbeeAes128Decrypt.h"
 #include "ZigbeeTouchlink.h"
 #include "ZigbeeGreenPower.h"
+#include "ZigbeeGreenPowerCluster.h"
+#include "ZigbeeGpProxy.h"
 #include "ZigbeeInterPan.h"
 #include "ZigbeeBdb.h"
 
@@ -84,6 +86,16 @@ using nzb::GPD_CMD_OFF;
 using nzb::GPD_CMD_COMMISSIONING;
 using nzb::GP_SEC_ENC_FC_MIC;
 using nzb::GP_SEC_NONE;
+using nzb::GP_SEC_FC_MIC;
+using nzb::ZigbeeGreenPowerCluster;
+using nzb::GpNotification;
+using nzb::GpPairing;
+using nzb::GP_CMD_NOTIFICATION;
+using nzb::GP_CMD_COMMISSIONING_NOTIFICATION;
+using nzb::GP_CMD_PAIRING;
+using nzb::GP_COMM_LIGHTWEIGHT_UNICAST;
+using nzb::ZigbeeGpProxy;
+using nzb::GpProxyEntry;
 using nzb::CC2530MacInfo;
 using nzb::CC2530RxCallback;
 using nzb::CC2530DataCallback;

@@ -166,7 +166,9 @@ Layered on the MAC base; each piece ships with a hardware self-test example.
   `ZigbeeInstallCode`, `ZigbeeTouchlink` (with a software AES-128 inverse cipher,
   since the nRF ECB is encrypt-only), `ZigbeeInterPan`.
 - **Green Power.** `ZigbeeGreenPower` (GPDF + AES-CCM* + commissioning) +
-  `ZigbeeGpSinkTable` (frame-counter replay protection).
+  `ZigbeeGpSinkTable` (frame-counter replay protection), plus `ZigbeeGpProxy` +
+  the GP cluster (0x0021) `ZigbeeGreenPowerCluster` to tunnel a battery-less
+  device across the mesh to a distant sink.
 - **ZCL device clusters.** Basic, Identify, Groups, Scenes, On/Off, Level
   Control, Color Control, Thermostat, Window Covering, Door Lock, IAS Zone,
   Occupancy Sensing, Temperature / Relative-Humidity / Electrical Measurement,
