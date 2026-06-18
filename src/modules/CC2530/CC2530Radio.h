@@ -134,6 +134,24 @@ class CC2530Radio {
                 const uint8_t* payload, uint8_t len,
                 bool ackRequest = false);
 
+  /** Transmit an inter-PAN MAC data frame carrying @p apdu (an inter-PAN APDU
+      from ZigbeeInterPan), used by Touchlink / Green Power commissioning before
+      the device has joined a network. Source addressing is extended (@p srcIeee);
+      the destination is a broadcast short address (a scan) or an extended address
+      (a discovered device). Receive with onReceive() + ZigbeeMac::parseInterPanFrame.
+      @return true on TXDONE. */
+  bool sendInterPan(uint8_t dstAddrMode, uint16_t dstPanId, uint16_t dstShort,
+                    uint64_t dstIeee, uint16_t srcPanId, uint64_t srcIeee,
+                    uint8_t sequence, const uint8_t* apdu, uint8_t apduLen,
+                    bool ackRequest = false) {
+    uint8_t frame[ZigbeeMac::kMaxPsdu];
+    uint8_t n = ZigbeeMac::buildInterPanFrame(
+        frame, sizeof(frame), dstAddrMode, dstPanId, dstShort, dstIeee, srcPanId,
+        srcIeee, sequence, apdu, apduLen, ackRequest);
+    if (n == 0) return false;
+    return send(frame, n);
+  }
+
   /** Transmit a MAC Association Request from an extended-address child. */
   bool sendAssociationRequest(uint16_t panId, uint16_t coordShort,
                               uint64_t srcIeee, uint8_t capability,

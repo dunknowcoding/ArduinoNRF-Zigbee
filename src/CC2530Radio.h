@@ -55,6 +55,9 @@
 using nzb::CC2530Radio;
 using nzb::ZigbeeInterPan;
 using nzb::InterPanFrame;
+using nzb::MacInterPanFrame;
+using nzb::MAC_ADDR_SHORT;
+using nzb::MAC_ADDR_EXTENDED;
 using nzb::INTERPAN_UNICAST;
 using nzb::INTERPAN_BROADCAST;
 using nzb::INTERPAN_GROUP;

@@ -255,6 +255,99 @@ uint8_t ZigbeeMac::buildDataRequest(uint8_t* out, uint8_t outMax, uint16_t panId
   return 10;
 }
 
+uint8_t ZigbeeMac::buildInterPanFrame(uint8_t* out, uint8_t outMax,
+                                      uint8_t dstAddrMode, uint16_t dstPanId,
+                                      uint16_t dstShort, uint64_t dstIeee,
+                                      uint16_t srcPanId, uint64_t srcIeee,
+                                      uint8_t sequence, const uint8_t* payload,
+                                      uint8_t payloadLen, bool ackRequest) {
+  if (!out) return 0;
+  if (dstAddrMode != MAC_ADDR_SHORT && dstAddrMode != MAC_ADDR_EXTENDED) {
+    return 0;
+  }
+  uint8_t dstAddrLen = (dstAddrMode == MAC_ADDR_EXTENDED) ? 8 : 2;
+  // FCF(2) seq(1) dstPAN(2) dstAddr(2/8) srcPAN(2) srcIeee(8) + payload.
+  uint8_t headerLen = (uint8_t)(2 + 1 + 2 + dstAddrLen + 2 + 8);
+  if (payloadLen > kMaxPsdu - headerLen) return 0;
+  if (outMax < headerLen + payloadLen) return 0;
+  if (payloadLen > 0 && !payload) return 0;
+
+  uint16_t fcf = 0;
+  fcf |= MAC_FRAME_DATA;
+  if (ackRequest) fcf |= 1u << 5;
+  // No PAN ID compression: inter-PAN carries both PANs.
+  fcf |= (uint16_t)(dstAddrMode & 0x3) << 10;
+  // frame version 2003 (0): inter-PAN frames must reach every conformant MAC.
+  fcf |= (uint16_t)MAC_ADDR_EXTENDED << 14;  // source address mode: extended
+
+  writeLe16(&out[0], fcf);
+  out[2] = sequence;
+  uint8_t off = 3;
+  writeLe16(&out[off], dstPanId);
+  off += 2;
+  if (dstAddrMode == MAC_ADDR_SHORT) {
+    writeLe16(&out[off], dstShort);
+    off += 2;
+  } else {
+    writeLe64(&out[off], dstIeee);
+    off += 8;
+  }
+  writeLe16(&out[off], srcPanId);
+  off += 2;
+  writeLe64(&out[off], srcIeee);
+  off += 8;
+  for (uint8_t i = 0; i < payloadLen; ++i) out[off + i] = payload[i];
+  return (uint8_t)(off + payloadLen);
+}
+
+bool ZigbeeMac::parseInterPanFrame(const uint8_t* psdu, uint8_t len,
+                                   MacInterPanFrame& frame) {
+  frame = MacInterPanFrame();
+  frame.payload = nullptr;
+  if (!psdu || len < 5) return false;
+
+  uint16_t fcf = readLe16(&psdu[0]);
+  uint8_t frameType = (uint8_t)(fcf & 0x7);
+  uint8_t dstMode = (uint8_t)((fcf >> 10) & 0x3);
+  uint8_t srcMode = (uint8_t)((fcf >> 14) & 0x3);
+  bool panCompression = (fcf & (1u << 6)) != 0;
+
+  // Inter-PAN: a data frame, extended source, no PAN ID compression.
+  if (frameType != MAC_FRAME_DATA || srcMode != MAC_ADDR_EXTENDED ||
+      panCompression) {
+    return false;
+  }
+  if (dstMode != MAC_ADDR_SHORT && dstMode != MAC_ADDR_EXTENDED) return false;
+
+  uint8_t offset = 2;
+  frame.sequence = psdu[offset++];
+  if (len < offset + 2) return false;
+  frame.dstPanId = readLe16(&psdu[offset]);
+  offset += 2;
+  frame.dstAddrMode = dstMode;
+  if (dstMode == MAC_ADDR_SHORT) {
+    if (len < offset + 2) return false;
+    frame.dstShort = readLe16(&psdu[offset]);
+    offset += 2;
+  } else {
+    if (len < offset + 8) return false;
+    frame.dstIeee = readLe64(&psdu[offset]);
+    offset += 8;
+  }
+  if (len < offset + 2) return false;
+  frame.srcPanId = readLe16(&psdu[offset]);
+  offset += 2;
+  if (len < offset + 8) return false;
+  frame.srcIeee = readLe64(&psdu[offset]);
+  offset += 8;
+
+  frame.valid = true;
+  frame.ackRequest = (fcf & (1u << 5)) != 0;
+  frame.payload = &psdu[offset];
+  frame.payloadLen = (uint8_t)(len - offset);
+  return true;
+}
+
 uint8_t ZigbeeMac::buildBeacon(uint8_t* out, uint8_t outMax, uint16_t srcPanId,
                                uint16_t srcShort, uint8_t sequence,
                                bool panCoordinator, bool associationPermit,

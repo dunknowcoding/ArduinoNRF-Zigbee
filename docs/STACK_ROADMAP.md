@@ -490,10 +490,13 @@ while preserving the existing raw send / receive / sniffer APIs.
     cipher (verified against the FIPS-197 vector AND cross-checked vs the
     hardware ECB). `CC2530_Touchlink` self-tests it 13/13 on hardware: AES KAT,
     command round-trips, and a full encrypt-on-initiator / recover-on-target key
-    transport (wrong transaction id does not recover the key). What remains:
-    wire the commands onto inter-PAN transmission (a stub NWK/APS over a raw MAC
-    frame) and confirm the key-index-4 expanded-input order against a certified
-    ZLL reference vector.
+    transport (wrong transaction id does not recover the key). The inter-PAN
+    transmission layer the commands ride on is now DONE (item 15:
+    `ZigbeeMac::buildInterPanFrame` + `CC2530Radio::sendInterPan`), so a touchlink
+    Scan Request now goes out as a real broadcast MAC inter-PAN frame. What
+    remains: a 2-board OTA scan/response + network-start key transport in
+    `CC2530_Touchlink`, and confirming the key-index-4 expanded-input order
+    against a certified ZLL reference vector.
 
 14. **Green Power** - DONE (GPDF + GP security + commissioning + sink table).
     Green Power devices (GPDs) are battery-less switches/sensors that emit Green
@@ -537,8 +540,15 @@ while preserving the existing raw send / receive / sniffer APIs.
     network. `CC2530_InterPan` self-tests it 9/9 on hardware, including a real
     touchlink Scan Request wrapped in an inter-PAN broadcast and recovered. This
     is the transmission layer touchlink (M13/#13) and Green Power scanning ride
-    on; the remaining step is the MAC-level inter-PAN addressing (IEEE source,
-    broadcast PAN 0xFFFF) on the radio.
+    on. **The MAC-level inter-PAN frame is now DONE:**
+    `ZigbeeMac::buildInterPanFrame` / `parseInterPanFrame` build/parse the real
+    on-air frame (extended IEEE source addressing, broadcast PAN/short 0xFFFF for
+    a scan or an extended destination for a unicast, no PAN ID compression), and
+    `CC2530Radio::sendInterPan()` transmits it. `CC2530_InterPan` self-tests the
+    full stack end to end (touchlink Scan Request -> inter-PAN APDU -> MAC
+    inter-PAN frame -> parse back -> recovered command, broadcast + unicast, and
+    a negative test that a short data frame is not mis-parsed as inter-PAN).
+    Compiles clean; HW bench run pending.
 
 16. **APS application-data encryption** - DONE. On top of the NWK-layer
     encryption every frame gets, `ZigbeeApsSecurity::secureDataFrame` /

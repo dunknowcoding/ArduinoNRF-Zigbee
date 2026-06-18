@@ -86,6 +86,24 @@ struct MacAssociationResponse {
   uint8_t status;
 };
 
+/** Parsed inter-PAN MAC data frame (touchlink / Green Power commissioning).
+    Source addressing is always extended (IEEE); the destination is either a
+    broadcast short address (a scan) or an extended address (a discovered
+    device). No PAN ID compression. */
+struct MacInterPanFrame {
+  bool valid;
+  uint8_t sequence;
+  bool ackRequest;
+  uint8_t dstAddrMode;
+  uint16_t dstPanId;
+  uint16_t dstShort;
+  uint64_t dstIeee;
+  uint16_t srcPanId;
+  uint64_t srcIeee;
+  const uint8_t* payload;
+  uint8_t payloadLen;
+};
+
 /** Parsed IEEE 802.15.4 beacon frame (beacon-enabled fields are not used by
     Zigbee, so only the beaconless-PAN subset is exposed). */
 struct MacBeaconFrame {
@@ -146,6 +164,22 @@ class ZigbeeMac {
   static uint8_t buildDataRequest(uint8_t* out, uint8_t outMax, uint16_t panId,
                                   uint16_t parentShort, uint16_t childShort,
                                   uint8_t sequence);
+
+  /** Build an inter-PAN MAC data frame carrying @p payload (an inter-PAN APDU;
+      see ZigbeeInterPan). Source addressing is always extended (the device's
+      IEEE). @p dstAddrMode is MAC_ADDR_SHORT (use @p dstShort, typically the
+      0xFFFF broadcast for a scan) or MAC_ADDR_EXTENDED (use @p dstIeee). No PAN
+      ID compression; @p dstPanId is 0xFFFF for a broadcast scan. */
+  static uint8_t buildInterPanFrame(uint8_t* out, uint8_t outMax,
+                                    uint8_t dstAddrMode, uint16_t dstPanId,
+                                    uint16_t dstShort, uint64_t dstIeee,
+                                    uint16_t srcPanId, uint64_t srcIeee,
+                                    uint8_t sequence, const uint8_t* payload,
+                                    uint8_t payloadLen, bool ackRequest = false);
+
+  /** Parse an inter-PAN MAC data frame (extended source addressing). */
+  static bool parseInterPanFrame(const uint8_t* psdu, uint8_t len,
+                                 MacInterPanFrame& frame);
 
   /** Build a beaconless-PAN 802.15.4 beacon frame carrying @p payload. */
   static uint8_t buildBeacon(uint8_t* out, uint8_t outMax, uint16_t srcPanId,

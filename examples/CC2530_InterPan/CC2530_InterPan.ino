@@ -5,9 +5,11 @@
   device has joined a network: a MAC payload of a one-octet stub NWK header +
   a stripped-down APS header (frame control + optional group + cluster + profile)
   + the command. This sketch self-tests the inter-PAN APDU build/parse for
-  broadcast / unicast / group delivery, and wraps a real touchlink Scan Request
+  broadcast / unicast / group delivery, wraps a real touchlink Scan Request
   end-to-end (touchlink command -> inter-PAN broadcast -> parse -> recover the
-  touchlink command).
+  touchlink command), and builds/parses the FULL MAC inter-PAN frame
+  (ZigbeeMac::buildInterPanFrame / parseInterPanFrame) - the real on-air byte
+  layout with extended source addressing - for both broadcast and unicast.
 
   No radio traffic; runs on board1 via J-Link.
 */
@@ -79,6 +81,65 @@ void testTouchlinkOverInterPan() {
         "touchlink Scan Request recovered from the inter-PAN payload");
 }
 
+void testMacInterPanFrame() {
+  Serial.println("Full MAC inter-PAN frame (on-air byte layout):");
+  const uint64_t SRC_IEEE = 0x00124B0001020304ULL;
+  const uint64_t DST_IEEE = 0x00124B00AABBCCDDULL;
+  const uint16_t SRC_PAN = 0x1A62;
+
+  // Build a touchlink Scan Request -> inter-PAN APDU -> broadcast MAC inter-PAN
+  // frame, then parse the whole thing back, exactly as it goes over the air.
+  uint8_t scan[8];
+  uint8_t sn = ZigbeeTouchlink::buildScanRequest(scan, sizeof(scan), 0xCAFEBABE,
+                                                 0x12, 0x33);
+  uint8_t apdu[24];
+  uint8_t an = ZigbeeInterPan::build(apdu, sizeof(apdu), INTERPAN_BROADCAST, 0,
+                                     kClusterTouchlink, kProfileZll, scan, sn);
+
+  uint8_t mac[64];
+  uint8_t mn = ZigbeeMac::buildInterPanFrame(
+      mac, sizeof(mac), MAC_ADDR_SHORT, /*dstPan=*/0xFFFF, /*dstShort=*/0xFFFF,
+      /*dstIeee=*/0, SRC_PAN, SRC_IEEE, /*seq=*/7, apdu, an);
+  check(mn > 0, "build broadcast MAC inter-PAN frame");
+  check(mac[0] == 0x01, "frame type = data, no PAN compression");
+
+  MacInterPanFrame mf;
+  check(ZigbeeMac::parseInterPanFrame(mac, mn, mf), "parse MAC inter-PAN frame");
+  check(mf.dstAddrMode == MAC_ADDR_SHORT && mf.dstShort == 0xFFFF &&
+            mf.dstPanId == 0xFFFF,
+        "broadcast destination (0xFFFF / 0xFFFF)");
+  check(mf.srcPanId == SRC_PAN && mf.srcIeee == SRC_IEEE,
+        "extended source addressing round-trip");
+
+  // Recover the inter-PAN APDU, then the touchlink command, from the MAC payload.
+  InterPanFrame ipf;
+  check(ZigbeeInterPan::parse(mf.payload, mf.payloadLen, ipf) &&
+            ipf.clusterId == kClusterTouchlink,
+        "inter-PAN APDU recovered from the MAC payload");
+  uint32_t tid; uint8_t zb, zll;
+  check(ZigbeeTouchlink::parseScanRequest(ipf.payload, ipf.payloadLen, tid, zb,
+                                          zll) && tid == 0xCAFEBABE,
+        "touchlink Scan Request recovered end-to-end over the MAC frame");
+
+  // Unicast variant: extended destination (a discovered device's IEEE).
+  uint8_t mu[64];
+  uint8_t mun = ZigbeeMac::buildInterPanFrame(
+      mu, sizeof(mu), MAC_ADDR_EXTENDED, /*dstPan=*/0xFFFF, /*dstShort=*/0,
+      DST_IEEE, SRC_PAN, SRC_IEEE, /*seq=*/8, apdu, an);
+  MacInterPanFrame muf;
+  check(mun > 0 && ZigbeeMac::parseInterPanFrame(mu, mun, muf) &&
+            muf.dstAddrMode == MAC_ADDR_EXTENDED && muf.dstIeee == DST_IEEE,
+        "unicast MAC inter-PAN frame with extended destination");
+
+  // A normal short data frame must NOT parse as inter-PAN (src is short, not IEEE).
+  uint8_t data[32];
+  uint8_t dn = ZigbeeMac::buildShortDataFrame(data, sizeof(data), SRC_PAN, 0x0002,
+                                              0x0001, 9, apdu, an);
+  MacInterPanFrame neg;
+  check(!ZigbeeMac::parseInterPanFrame(data, dn, neg),
+        "short data frame rejected by inter-PAN parser");
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial && millis() < 3000) {}
@@ -86,6 +147,7 @@ void setup() {
 
   testInterPanFrame();
   testTouchlinkOverInterPan();
+  testMacInterPanFrame();
 
   Serial.print("RESULT: "); Serial.print(passes); Serial.print(" passed, ");
   Serial.print(fails); Serial.println(" failed");
