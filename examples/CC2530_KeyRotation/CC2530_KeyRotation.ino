@@ -6,7 +6,10 @@
   ZigbeeSecurity decrypts each frame with the key whose sequence number matches
   its aux header, so traffic secured under either key is accepted across the
   switchover. This sketch self-tests that, plus that single-key behaviour is
-  unchanged. Runs on board1 via J-Link.
+  unchanged, plus the post-rekey replay resync: because frame counters restart
+  when the key rotates, the replay identity is (source IEEE, key sequence), so a
+  low counter under a freshly installed key is accepted instead of being rejected
+  as a replay against the old key's high counter. Runs on board1 via J-Link.
 */
 
 #include <CC2530Radio.h>
@@ -91,6 +94,35 @@ void testRotation() {
   check(!opensTo(newOnly, fA, fAn), "new-key-only node can't read an old-key frame");
 }
 
+void testPostRekeyResync() {
+  Serial.println("Post-rekey replay resync (no table reset across the switch):");
+  uint8_t A[16], B[16];
+  for (uint8_t i = 0; i < 16; ++i) { A[i] = (uint8_t)(0xA0 + i); B[i] = (uint8_t)(0xB0 + i); }
+
+  ZigbeeSecurity sec;
+  sec.setNetworkKey(A, 0);
+  // The device has been running under key A with a high frame counter.
+  uint8_t fA[64];
+  uint8_t fAn = secure(sec, 5000, fA, sizeof(fA));
+  check(opensTo(sec, fA, fAn), "frame under key A (counter 5000) opens");
+
+  // The TC rotates to key B; the device's frame counter restarts low under the
+  // new key sequence. The replay table is NOT reset - exactly the on-air case.
+  sec.setAlternateKey(B, 1);
+  check(sec.switchKey(1) && sec.keySequence() == 1, "Switch-Key -> B active");
+  uint8_t fB[64];
+  uint8_t fBn = secure(sec, 1, fB, sizeof(fB));  // low counter under key seq 1
+
+  uint32_t replaysBefore = sec.stats().replays;
+  check(opensTo(sec, fB, fBn),
+        "low counter under the new key is accepted (per-key-seq resync)");
+  check(sec.stats().replays == replaysBefore, "no replay drop across the rekey");
+
+  // A genuine replay under the new key is still rejected.
+  check(!opensTo(sec, fB, fBn), "replay of the new-key frame still rejected");
+  check(sec.stats().replays == replaysBefore + 1, "the real replay is counted");
+}
+
 void setup() {
   Serial.begin(115200);
   while (!Serial && millis() < 3000) {}
@@ -99,6 +131,7 @@ void setup() {
   buildPlain();
   testSingleKey();
   testRotation();
+  testPostRekeyResync();
 
   Serial.print("RESULT: "); Serial.print(passes); Serial.print(" passed, ");
   Serial.print(fails); Serial.println(" failed");

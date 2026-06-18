@@ -87,6 +87,7 @@ class ZigbeeSecurity {
   struct ReplayEntry {
     bool used;
     uint64_t ieee;
+    uint8_t keySeq;  ///< replay identity is (ieee, key sequence)
     uint32_t lastCounter;
   };
 
@@ -99,7 +100,7 @@ class ZigbeeSecurity {
   ZigbeeSecurityStats stats_;
   ReplayEntry replay_[kMaxReplayPeers];
 
-  bool replayCheckAndUpdate(uint64_t ieee, uint32_t counter);
+  bool replayCheckAndUpdate(uint64_t ieee, uint8_t keySeq, uint32_t counter);
 
   // CCM* core (M=4, L=2) on the hardware AES block.
   bool ccmStar(bool encrypt, const uint8_t nonce[13], const uint8_t* aad,

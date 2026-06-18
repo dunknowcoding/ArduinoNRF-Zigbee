@@ -104,10 +104,16 @@ void ZigbeeSecurity::resetReplayTable() {
   for (uint8_t i = 0; i < kMaxReplayPeers; ++i) replay_[i] = ReplayEntry();
 }
 
-bool ZigbeeSecurity::replayCheckAndUpdate(uint64_t ieee, uint32_t counter) {
+bool ZigbeeSecurity::replayCheckAndUpdate(uint64_t ieee, uint8_t keySeq,
+                                          uint32_t counter) {
+  // The replay identity is (source IEEE, key sequence). Frame counters restart
+  // when the network key is rotated, so a frame under a freshly installed key
+  // gets its own entry and a low counter is accepted as fresh - rather than
+  // being rejected as a replay against the old key's high counter.
   ReplayEntry* slot = nullptr;
   for (uint8_t i = 0; i < kMaxReplayPeers; ++i) {
-    if (replay_[i].used && replay_[i].ieee == ieee) {
+    if (replay_[i].used && replay_[i].ieee == ieee &&
+        replay_[i].keySeq == keySeq) {
       if (counter <= replay_[i].lastCounter) return false;
       replay_[i].lastCounter = counter;
       return true;
@@ -115,7 +121,7 @@ bool ZigbeeSecurity::replayCheckAndUpdate(uint64_t ieee, uint32_t counter) {
     if (!slot && !replay_[i].used) slot = &replay_[i];
   }
   if (!slot) {
-    // Table full: recycle the entry with the lowest counter (oldest device).
+    // Table full: recycle the entry with the lowest counter (oldest device/key).
     slot = &replay_[0];
     for (uint8_t i = 1; i < kMaxReplayPeers; ++i) {
       if (replay_[i].lastCounter < slot->lastCounter) slot = &replay_[i];
@@ -123,6 +129,7 @@ bool ZigbeeSecurity::replayCheckAndUpdate(uint64_t ieee, uint32_t counter) {
   }
   slot->used = true;
   slot->ieee = ieee;
+  slot->keySeq = keySeq;
   slot->lastCounter = counter;
   return true;
 }
@@ -205,6 +212,7 @@ uint8_t ZigbeeSecurity::openNpdu(const uint8_t* npdu, uint8_t npduLen,
   const uint8_t* aux = &npdu[headerLen];
   uint32_t frameCounter = readLe32(&aux[1]);
   uint64_t srcIeee = readLe64(&aux[5]);
+  uint8_t auxKeySeq = aux[13];
   uint8_t controlCrypto = (uint8_t)((aux[0] & ~0x07) | kLevel);
 
   // Select the decryption key by the aux header's key sequence number. With a
@@ -212,10 +220,9 @@ uint8_t ZigbeeSecurity::openNpdu(const uint8_t* npdu, uint8_t npduLen,
   // an alternate key lets frames secured under either key be accepted.
   const uint8_t* useKey = key_;
   if (hasAlt_) {
-    uint8_t keySeq = aux[13];
-    if (keySeq == keySequence_) {
+    if (auxKeySeq == keySequence_) {
       useKey = key_;
-    } else if (keySeq == altKeySeq_) {
+    } else if (auxKeySeq == altKeySeq_) {
       useKey = altKey_;
     } else {
       ++stats_.micFailures;
@@ -275,7 +282,7 @@ uint8_t ZigbeeSecurity::openNpdu(const uint8_t* npdu, uint8_t npduLen,
     return 0;
   }
 
-  if (!replayCheckAndUpdate(srcIeee, frameCounter)) {
+  if (!replayCheckAndUpdate(srcIeee, auxKeySeq, frameCounter)) {
     ++stats_.replays;
     return 0;
   }

@@ -261,9 +261,16 @@ while preserving the existing raw send / receive / sniffer APIs.
    underran the FIFO and copied repeated stale bytes for the frame tail (the
    cipher/MIC), which only large frames (the ~80 B key transport) ever hit. The
    fix paces each read to reception (`while(RXFIFOCNT==0)` per byte, bounded).
-   Remaining: key rotation via keySeq + Switch-Key, and the fresh-key-install
-   replay-counter resync (the joiner currently logs `rpl` churn right after
-   keying). Frame-counter persistence is DONE (item 5).
+   The dual-key rotation (keySeq + Switch-Key) and the **post-rekey replay resync
+   are now DONE**: the NWK-security replay identity is (source IEEE, key sequence),
+   so a low frame counter under a freshly installed key is accepted as fresh
+   instead of being dropped as a replay against the old key's high counter (the
+   `rpl` churn). `CC2530_KeyRotation` adds a test that rotates the key without
+   resetting the replay table and confirms the low new-key counter opens with no
+   replay drop, while a genuine replay is still rejected. Remaining: the on-air
+   `-DNIUS_ZIGBEE_KEY_ROTATE=1` wiring in CC2530_BeaconJoin (TC distributes the
+   new key + broadcasts Switch-Key; each node resets its outgoing counter on
+   switch). Frame-counter persistence is DONE (item 5).
 2. **Broadcast Transaction Table** - DONE (data structure + self-test).
    `ZigbeeBroadcastTable` tracks each broadcast transaction = (NWK source,
    sequence number): `recordIncoming` returns NEW (process + rebroadcast once)
