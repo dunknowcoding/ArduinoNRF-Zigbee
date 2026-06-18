@@ -12,7 +12,10 @@
   This header validates an install code's CRC and derives the link key. Install
   codes are 6/8/12/16 data bytes + a 2-byte CRC, so 8/10/14/18 bytes total.
   The CRC is CRC-16/X-25 (reflected, init 0xFFFF, xorout 0xFFFF) and is stored
-  big-endian (most significant byte first) at the end of the code.
+  LITTLE-endian (least significant byte first) at the end of the code, matching
+  real Zigbee install codes - e.g. the install code
+  83FED3407A939723A5C639B26916D505C3B5 has CRC value 0xB5C3 stored as the trailing
+  bytes C3 B5, and derives the link key 66B6900981E1EE3CA4206B6B861C02BB.
 */
 #ifndef NIUS_ZIGBEE_INSTALL_CODE_H
 #define NIUS_ZIGBEE_INSTALL_CODE_H
@@ -38,12 +41,12 @@ class ZigbeeInstallCode {
   }
 
   /** True if @p len is a valid install-code length (8/10/14/18) and the trailing
-      2-byte big-endian CRC matches a CRC computed over the data bytes. */
+      2-byte little-endian CRC matches a CRC computed over the data bytes. */
   static bool validate(const uint8_t* codeWithCrc, uint8_t len) {
     if (!codeWithCrc) return false;
     if (len != 8 && len != 10 && len != 14 && len != 18) return false;
     uint16_t computed = crc16(codeWithCrc, (uint8_t)(len - 2));
-    uint16_t stored = (uint16_t)((codeWithCrc[len - 2] << 8) | codeWithCrc[len - 1]);
+    uint16_t stored = (uint16_t)(codeWithCrc[len - 2] | (codeWithCrc[len - 1] << 8));
     return computed == stored;
   }
 
@@ -57,8 +60,8 @@ class ZigbeeInstallCode {
     if (outMax < (uint8_t)(dataLen + 2)) return 0;
     memcpy(out, data, dataLen);
     uint16_t crc = crc16(data, dataLen);
-    out[dataLen] = (uint8_t)(crc >> 8);    // big-endian
-    out[dataLen + 1] = (uint8_t)(crc & 0xFF);
+    out[dataLen] = (uint8_t)(crc & 0xFF);  // little-endian (Zigbee install-code order)
+    out[dataLen + 1] = (uint8_t)(crc >> 8);
     return (uint8_t)(dataLen + 2);
   }
 

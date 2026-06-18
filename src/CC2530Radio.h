@@ -30,6 +30,7 @@
 #include "ZigbeePanIdConflict.h"
 #include "ZigbeeSourceRouteTable.h"
 #include "ZigbeeInstallCode.h"
+#include "ZigbeeTcLinkKeyStore.h"
 #include "ZigbeeGroupTable.h"
 #include "ZigbeeGroupsCluster.h"
 #include "ZigbeeLevelControlCluster.h"
@@ -191,6 +192,8 @@ using nzb::NWK_SR_DELIVER;
 using nzb::NWK_SR_RELAY;
 using nzb::NWK_SR_DROP;
 using nzb::ZigbeeInstallCode;
+using nzb::ZigbeeTcLinkKeyStore;
+using nzb::TcLinkKeyEntry;
 using nzb::ZigbeeGroupTable;
 using nzb::ZigbeeGroupsCluster;
 using nzb::ZigbeeLevelControlCluster;

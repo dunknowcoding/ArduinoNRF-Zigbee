@@ -423,9 +423,21 @@ while preserving the existing raw send / receive / sniffer APIs.
     per-device Trust Center link key as the AES-MMO-128 hash of the full code
     (reusing `ZigbeeApsSecurity::aesMmoHash`). This is the per-device
     alternative to the global "ZigBeeAlliance09" link key for APS key transport.
-    `CC2530_InstallCode` self-tests it 11/11 on hardware. What remains: feed the
-    derived key into the secure-join handshake (per-joiner link key instead of
-    the default) and a real spec install-code -> key reference vector.
+    `CC2530_InstallCode` self-tests it 11/11 on hardware. **Per-joiner secure join
+    is now DONE.** Two fixes/additions: (a) the install-code CRC is now stored
+    LITTLE-endian to match real Zigbee install codes (was big-endian; the
+    build/validate round trip was self-consistent but did not interoperate with
+    real codes) - verified against the canonical reference vector
+    83FED3407A939723A5C639B26916D505 / CRC C3 B5 ->
+    66B6900981E1EE3CA4206B6B861C02BB; (b) `ZigbeeTcLinkKeyStore` maps a joiner
+    IEEE to its link key (`provisionInstallCode` derives + stores it; `keyFor`
+    returns the per-device key or falls back to the global TC link key), so the
+    secure-join code wraps the Transport-Key under the joiner's unique key. The
+    `CC2530_InstallCode` self-test now adds the reference vector and a full
+    per-joiner Transport-Key wrap/unwrap (the joiner with the matching install
+    code recovers the network key; a wrong code is MIC-rejected). Compiles clean;
+    HW bench run pending. What remains: wire `ZigbeeTcLinkKeyStore` into
+    `CC2530_BeaconJoin` behind a build flag for an on-air per-joiner secure join.
 11. **Group addressing / multicast** - frames + membership DONE.
     `ZigbeeAps::buildGroupDataFrame` builds a group-addressed APS data frame
     (delivery mode = group, a 16-bit group address in place of the destination
