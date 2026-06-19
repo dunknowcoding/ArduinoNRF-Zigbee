@@ -39,6 +39,19 @@ no-SoftDevice ProMicro boards. See the ArduinoNRF core's
 | `CC2530_SourceRouteSecurity` — secured source-route OTA: relay-index AAD exclusion (bump the index on a secured frame and it still opens), per-hop re-secure, MIC integrity + replay rejection | 14/14 |
 | `CC2530_Fragmentation` / `CC2530_KeyTransport` / `CC2530_Binding` | APS fragment reassembly, TC key-transport frames, source binding table |
 
+### v0.8.0 feature-completion self-tests (board1, over J-Link)
+
+Hardware-verified on board1 (nRF52840 hardware AES via NrfEcb), each printing
+`RESULT: N passed, 0 failed`:
+
+| Example | Result | What it proves on silicon |
+|---------|--------|---------------------------|
+| `CC2530_InstallCode` | 21/21 | install-code little-endian CRC + the real reference vector 83FED3...C3B5 -> 66B6900981E1EE3CA4206B6B861C02BB (AES-MMO on the hardware AES), and per-joiner Transport-Key wrap/unwrap (`ZigbeeTcLinkKeyStore`) |
+| `CC2530_GreenPowerCluster` | 17/17 | GP proxy + GP cluster (0x0021): commissioning-through-proxy, secured operational decrypt at the sink (hardware CCM*), replay/dup + tampered-MIC rejection |
+| `CC2530_InterPan` | 18/18 | full MAC inter-PAN frame build/parse (broadcast + unicast) carrying a touchlink Scan Request end to end |
+| `CC2530_KeyRotation` | 16/16 | dual-key Switch-Key + the post-rekey replay resync (low new-key counter accepted, real replay still rejected) |
+| `CC2530_PanIdConflict` | 29/29 | `ZigbeeNetworkManager` detect-from-beacon / new-PAN selection / EPID-scoped freshness-checked PAN-ID + channel apply |
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`

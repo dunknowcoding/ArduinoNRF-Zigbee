@@ -153,4 +153,11 @@ void setup() {
   Serial.print(fails); Serial.println(" failed");
 }
 
-void loop() { delay(1000); }
+void loop() {
+  static uint32_t last = 0;
+  if (millis() - last > 2000) {
+    last = millis();
+    Serial.print("RESULT: "); Serial.print(passes); Serial.print(" passed, ");
+    Serial.print(fails); Serial.println(" failed");
+  }
+}
