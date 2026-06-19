@@ -52,6 +52,22 @@ Hardware-verified on board1 (nRF52840 hardware AES via NrfEcb), each printing
 | `CC2530_KeyRotation` | 16/16 | dual-key Switch-Key + the post-rekey replay resync (low new-key counter accepted, real replay still rejected) |
 | `CC2530_PanIdConflict` | 29/29 | `ZigbeeNetworkManager` detect-from-beacon / new-PAN selection / EPID-scoped freshness-checked PAN-ID + channel apply |
 
+### v0.8.0 on-air regression: secured line still forms
+
+After the Phase-1 changes, the multi-hop line was re-formed on hardware to confirm
+no regression. board1 (A/coordinator) was flashed over J-Link and boards B and C
+(no-SoftDevice) re-flashed to v0.8.0 over the verified DFU path; board D
+(nice!nano, SoftDevice layout @ 0x26000) stayed on the prior firmware (a
+v0.8.0 <-> earlier-build interop check). The line came up with
+`-DNIUS_ZIGBEE_LINE_TOPO=1`:
+
+- B `joined=y addr=0x0001`, C `joined=y addr=0x0031` (through B), D
+  `joined=y addr=0x0061` (through C).
+- The NWK-secured APS data plane runs end to end: D reports
+  `sec[tx=97 rx=71 mic=5 rpl=0] aps[q=33 ok=30 rtx=62 drop=2]` (~91% delivery,
+  climbing). **rpl=0** confirms the new per-(IEEE,key-seq) replay identity does
+  not false-positive on the live network.
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`
