@@ -18,12 +18,17 @@
  *     0x07 GET_MAC                   -> 0x85 MAC_INFO [flags retries pan short ieee]
  *     0x08 TX_ADV [retries psdu..]   -> 0x83 TXSTAT [status attempts]
  *     0x09 SET_TX_POWER [raw]        -> 0x82 OK
+ *     0x0A SET_PENDING [flag]        -> 0x82 OK
+ *          flag: 1 = set the frame-pending bit in outgoing auto-ACKs (a parent
+ *          tells a polling sleepy child "I have buffered data for you"),
+ *          0 = clear it. Maps to FRMCTRL1.PENDING_OR. Opt-in: default 0, so
+ *          behavior is unchanged unless the host buffers indirect frames.
  *   CC2530 -> Host (async):
  *     0x80 RESET_IND [ver_hi ver_lo]
  *     0x84 RX_FRAME [rssi lqi psdu..]
  */
 #define FW_VER_HI 0
-#define FW_VER_LO 4
+#define FW_VER_LO 5
 
 /* ---- SFRs ---- */
 __sfr __at (0xF1) PERCFG;
@@ -56,6 +61,7 @@ __xdata __at (0x6174) volatile unsigned char SHORT_ADDR0;
 __xdata __at (0x6175) volatile unsigned char SHORT_ADDR1;
 __xdata __at (0x6180) volatile unsigned char FRMFILT0;
 __xdata __at (0x6189) volatile unsigned char FRMCTRL0;
+__xdata __at (0x618A) volatile unsigned char FRMCTRL1;
 __xdata __at (0x618F) volatile unsigned char FREQCTRL;
 __xdata __at (0x6190) volatile unsigned char TXPOWER;
 __xdata __at (0x6198) volatile unsigned char RSSI;
@@ -81,6 +87,7 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 #define CMD_GET_MAC       0x07
 #define CMD_TX_ADV        0x08
 #define CMD_SET_TX_POWER  0x09
+#define CMD_SET_PENDING   0x0A
 
 #define RSP_RESET_IND     0x80
 #define RSP_PONG          0x81
@@ -98,6 +105,13 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 
 #define FRMCTRL0_AUTOACK  0x20
 #define FRMCTRL0_AUTOCRC  0x40
+
+/* FRMCTRL1.PENDING_OR (bit 2): when 1, the frame-pending bit in ALL outgoing
+   auto-ACKs is forced to 1, so a parent answers a sleepy child's MAC Data
+   Request poll with "I have data buffered for you". The host sets this while it
+   has indirect frames queued (ZigbeeIndirectQueue::hasPending) and clears it
+   when the queue drains. */
+#define FRMCTRL1_PENDING_OR  0x04
 
 #define STROBE_SRXON      0xE3
 #define STROBE_STXON      0xE9
@@ -283,6 +297,11 @@ void main(void){
               }
               else if(cc==CMD_SET_TX_POWER && ln>=2){
                 TXPOWER=cmd[1]; send_frame(RSP_OK,tmp,0);
+              }
+              else if(cc==CMD_SET_PENDING && ln>=2){
+                if(cmd[1]) FRMCTRL1 |= FRMCTRL1_PENDING_OR;
+                else FRMCTRL1 &= (unsigned char)~FRMCTRL1_PENDING_OR;
+                send_frame(RSP_OK,tmp,0);
               }
             }
             st=0;

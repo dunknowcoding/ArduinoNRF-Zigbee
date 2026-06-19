@@ -121,6 +121,13 @@ class CC2530Radio {
   /** Set the raw CC2530 TXPOWER register value. */
   bool setTxPowerRaw(uint8_t txpower);
 
+  /** Set/clear the frame-pending bit in outgoing auto-ACKs (CC2530 firmware
+      v0.5+, FRMCTRL1.PENDING_OR). A parent sets this while it has frames buffered
+      for a sleepy child (ZigbeeIndirectQueue::hasPending) so the child's MAC Data
+      Request poll is answered with "data pending"; clear it when the queue drains.
+      Opt-in: default off, behavior unchanged otherwise. @return true on OK. */
+  bool setFramePending(bool pending);
+
   /** Transmit a raw 802.15.4 frame (the radio appends the FCS). @return true on TXDONE. */
   bool send(const uint8_t* payload, uint8_t len);
 

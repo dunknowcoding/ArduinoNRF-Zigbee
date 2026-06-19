@@ -46,6 +46,9 @@ ZigbeeBroadcastTable	KEYWORD1
 ZigbeeIndirectQueue	KEYWORD1
 ZigbeeEndDeviceTimeout	KEYWORD1
 ZigbeePanIdConflict	KEYWORD1
+ZigbeeNetworkManager	KEYWORD1
+ZigbeeTcLinkKeyStore	KEYWORD1
+MacInterPanFrame	KEYWORD1
 ZigbeeSourceRouteTable	KEYWORD1
 SourceRouteEntry	KEYWORD1
 ZigbeeInstallCode	KEYWORD1

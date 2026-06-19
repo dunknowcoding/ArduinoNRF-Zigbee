@@ -16,6 +16,7 @@ const uint8_t CMD_SET_MAC = 0x06;
 const uint8_t CMD_GET_MAC = 0x07;
 const uint8_t CMD_TX_ADV = 0x08;
 const uint8_t CMD_SET_TX_POWER = 0x09;
+const uint8_t CMD_SET_PENDING = 0x0A;
 // module -> host
 const uint8_t RSP_RESET_IND = 0x80;
 const uint8_t RSP_PONG = 0x81;
@@ -291,6 +292,12 @@ bool CC2530Radio::getMacInfo(CC2530MacInfo& info) {
 
 bool CC2530Radio::setTxPowerRaw(uint8_t txpower) {
   sendFrame(CMD_SET_TX_POWER, &txpower, 1);
+  return waitResp(RSP_OK, 300);
+}
+
+bool CC2530Radio::setFramePending(bool pending) {
+  uint8_t v = pending ? 1 : 0;
+  sendFrame(CMD_SET_PENDING, &v, 1);
   return waitResp(RSP_OK, 300);
 }
 

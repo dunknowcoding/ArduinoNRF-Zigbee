@@ -7,8 +7,11 @@
   ZigbeeMac::buildDataRequest (the child's poll) and ZigbeeIndirectQueue (the
   parent's pending-frame store). No radio traffic; runs on board1 via J-Link.
 
-  Setting the frame-pending bit in the ack on air needs CC2530 firmware
-  support; the host-side queue + poll logic verified here is the rest of it.
+  Setting the frame-pending bit in the auto-ACK on air is supported by CC2530
+  firmware v0.5+ (FRMCTRL1.PENDING_OR): a parent calls
+  radio.setFramePending(queue.hasPending(child)) so a polling child is told
+  "data pending". This sketch verifies the host-side queue + poll logic; the
+  on-air pending bit is exercised in the multi-board sleepy-device demo.
 */
 
 #include <CC2530Radio.h>

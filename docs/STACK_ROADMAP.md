@@ -293,9 +293,14 @@ while preserving the existing raw send / receive / sniffer APIs.
    `expire` ages out after macTransactionPersistenceTime ~7.68 s, oldest slot
    reused when full). `CC2530_IndirectQueue` self-tests it 27/27 on hardware
    (Data Request build+parse, enqueue/poll/peek/dequeue, replace-latest +
-   capacity reuse, expiry). What remains: set the frame-pending bit in the ack
-   to the Data Request on air, which needs CC2530 firmware support (or
-   relaxed-timing host emulation); `hasPending()` is the host-side input.
+   capacity reuse, expiry). **The on-air frame-pending bit is now supported by
+   CC2530 firmware v0.5:** a new `SET_PENDING` command (0x0A) sets/clears
+   `FRMCTRL1.PENDING_OR`, forcing the frame-pending bit in outgoing auto-ACKs, and
+   `CC2530Radio::setFramePending(bool)` drives it from `ZigbeeIndirectQueue::
+   hasPending()` (opt-in; default off, so non-sleepy behavior is unchanged). The
+   v0.5 firmware is build-verified (SDCC) and the binary/embedded header are
+   regenerated. What remains: confirm the on-air pending-bit effect with a real
+   sleepy child on the bench, and wire it into the multi-board sleepy demo.
    The keep-alive side is DONE too: `ZigbeeEndDeviceTimeout` builds/parses the
    NWK End Device Timeout Request (0x0B) / Response (0x0C) and maps the timeout
    enumeration to seconds (index 0 = 10 s, then 2^n minutes), so a sleepy child

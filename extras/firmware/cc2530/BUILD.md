@@ -23,6 +23,15 @@ than ~70 bytes (e.g. an APS key-transport) arrived with a garbled cipher/MIC.
 The read now paces to reception (`while(RXFIFOCNT==0)` per byte, bounded so an
 aborted frame cannot hang it). Reflash every module after rebuilding.
 
+Firmware v0.5 adds `SET_PENDING` (0x0A): the host sets/clears
+`FRMCTRL1.PENDING_OR`, which forces the frame-pending bit in outgoing auto-ACKs
+to 1. A parent sets it while it has frames buffered for a sleepy child
+(`ZigbeeIndirectQueue::hasPending`) so the child's MAC Data Request poll is
+answered with "data pending", then clears it when the queue drains. It is opt-in
+(default 0), so behavior is unchanged for non-sleepy use. The new command is
+build-verified with SDCC; the on-air frame-pending effect on the auto-ACK should
+be confirmed on the bench with a real sleepy child.
+
 ## UART protocol
 
 ```
