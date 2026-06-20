@@ -105,6 +105,12 @@ class CC2530ZnpRadio {
   bool ping();
   uint16_t capabilities() const { return capabilities_; }
 
+  /** Poll SYS_PING until the ZNP answers or @p timeoutMs elapses. Use this after
+      a hardware reset: the Z-Stack serial bootloader (in the with-SBL image)
+      waits ~60 s for a host force-boot before it jumps to the ZNP app, so the app
+      is not responsive immediately. @return true once the app answers MT. */
+  bool waitUntilResponsive(uint32_t timeoutMs = 65000);
+
   /** SYS_VERSION. */
   bool getVersion(ZnpVersion& out);
 

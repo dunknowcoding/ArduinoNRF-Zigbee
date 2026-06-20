@@ -210,6 +210,16 @@ bool CC2530ZnpRadio::ping() {
   return true;
 }
 
+bool CC2530ZnpRadio::waitUntilResponsive(uint32_t timeoutMs) {
+  uint32_t t0 = millis();
+  for (;;) {
+    if (ping()) return true;            // SYS_PING SRSP arrived -> app is up
+    if (millis() - t0 >= timeoutMs) return false;
+    delay(1000);  // pace polling; a stray SYS_PING in the SBL window is an
+                  // unsupported SB command (ignored), so it won't force-boot
+  }
+}
+
 bool CC2530ZnpRadio::getVersion(ZnpVersion& out) {
   if (!sreq(kSubSys, SYS_VERSION, nullptr, 0) || respLen_ < 5) return false;
   out.transportRev = resp_[0];
