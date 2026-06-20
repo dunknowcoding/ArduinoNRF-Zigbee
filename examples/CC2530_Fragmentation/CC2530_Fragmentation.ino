@@ -100,6 +100,16 @@ void setup() {
             !f1.firstBlock && f1.blockNumber == 1,
         "second fragment header (first=0, index=1)");
 
+  // Regression guard: a built fragment MUST also be accepted by the real APS data
+  // parser an on-air receiver runs (ZigbeeAps::parseDataFrame) as an
+  // extended-header UNICAST frame. The ext-header bit once collided with the
+  // delivery-mode field, so every fragment was silently rejected over the air.
+  ApsDataFrame ad;
+  check(ZigbeeAps::parseDataFrame(frames[0], frameLens[0], ad) &&
+            ad.extendedHeader && ad.firstBlock && ad.blockNumber == total &&
+            ad.deliveryMode == APS_DELIVERY_UNICAST && ad.clusterId == CLUSTER,
+        "fragment accepted by ZigbeeAps::parseDataFrame (ext header, unicast)");
+
   // In-order reassembly.
   uint8_t inOrder[8];
   for (uint8_t i = 0; i < total; ++i) inOrder[i] = i;

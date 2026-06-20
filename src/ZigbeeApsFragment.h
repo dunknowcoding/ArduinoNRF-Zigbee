@@ -48,7 +48,10 @@ class ZigbeeApsFragment {
   static const uint8_t kHeaderLen = kBaseHeaderLen + kExtHeaderLen;  // 10
   static const uint8_t kExtFcfFirst = 0x01;
   static const uint8_t kExtFcfSubsequent = 0x02;
-  static const uint8_t kFcfExtHeaderBit = 0x08;  // APS FCF extended-header bit
+  // APS FCF extended-header-present bit is bit 7 (0x80) per the Zigbee spec; bits
+  // 2-3 are the delivery mode, so the old 0x08 collided with it and produced
+  // frames a compliant APS parser rejected (delivery mode read as 0b10).
+  static const uint8_t kFcfExtHeaderBit = 0x80;  // APS FCF extended-header bit
 
   /** Build one fragment APDU.
       @param firstBlock     true for block 0 (blockNumber must then be the

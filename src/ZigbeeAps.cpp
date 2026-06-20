@@ -108,7 +108,7 @@ bool ZigbeeAps::parseDataFrame(const uint8_t* apdu, uint8_t len,
   bool extendedHeader = (fcf & (1u << 7)) != 0;
 
   if (frameType != APS_FRAME_DATA) return false;
-  if (security || extendedHeader) return false;
+  if (security) return false;  // APS-layer security envelope not handled here
   if (deliveryMode != APS_DELIVERY_UNICAST && deliveryMode != APS_DELIVERY_GROUP) {
     return false;
   }
@@ -137,6 +137,15 @@ bool ZigbeeAps::parseDataFrame(const uint8_t* apdu, uint8_t len,
     frame.srcEndpoint = apdu[6];
     frame.counter = apdu[7];
     hdr = kBaseHeaderLen;
+  }
+  // APS extended header (fragmentation): extFCF(1) + blockNumber(1) follow the
+  // base header, then the block payload. extFCF fragmentation bits: 01=first
+  // block (blockNumber = total count), 10=subsequent (blockNumber = index).
+  if (extendedHeader) {
+    if ((uint16_t)hdr + 2u > len) return false;
+    frame.firstBlock = (uint8_t)(apdu[hdr] & 0x03) == 0x01;
+    frame.blockNumber = apdu[hdr + 1];
+    hdr = (uint8_t)(hdr + 2);
   }
   frame.payload = &apdu[hdr];
   frame.payloadLen = (uint8_t)(len - hdr);

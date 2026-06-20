@@ -30,7 +30,9 @@ struct ApsDataFrame {
   uint8_t deliveryMode;
   bool ackRequest;
   bool security;
-  bool extendedHeader;
+  bool extendedHeader;    // APS fragmentation: an ext header (extFCF+block#) follows
+  bool firstBlock;        // fragmentation: true for block 0 (blockNumber=total count)
+  uint8_t blockNumber;    // fragmentation: total block count (first) or block index
   uint8_t dstEndpoint;    // valid for unicast delivery
   uint16_t groupAddress;  // valid for group delivery (deliveryMode == GROUP)
   uint16_t clusterId;

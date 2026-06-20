@@ -109,6 +109,17 @@
 #define NIUS_ZIGBEE_SOURCEROUTE 0
 #endif
 
+// APS fragmentation over the multi-hop route: when enabled, the end device sends
+// a long ASDU (too big for one frame) as APS fragments over its routed path to
+// the coordinator, which reassembles them in onApsData. The fragmenter/reassembler
+// are self-tested in CC2530_Fragmentation; this is the on-air wiring. Build with
+// -DNIUS_ZIGBEE_FRAGTEST=1.
+#ifndef NIUS_ZIGBEE_FRAGTEST
+#define NIUS_ZIGBEE_FRAGTEST 0
+#endif
+static const uint16_t FRAG_ASDU_LEN = 120;   // long test ASDU (needs fragmenting)
+static const uint8_t FRAG_BLOCK_SIZE = 40;   // per-fragment block size -> 3 blocks
+
 static const uint16_t PAN_ID = NIUS_ZIGBEE_PAN_ID;
 static const uint64_t EXT_PAN_ID = 0x1A62195E00000000ULL;
 static const uint8_t COORD_CHANNEL = 15;
@@ -887,6 +898,43 @@ void onApsData(const MacDataFrame& mac, const NwkDataFrame& nwk,
 #endif
   if (aps.clusterId != APS_CLUSTER) return;  // leave ZDO etc. alone
 
+#if NIUS_ZIGBEE_FRAGTEST
+  // Phase 2: reassemble a fragmented ASDU. All blocks of one ASDU share the APS
+  // counter, so this must run BEFORE the duplicate check (which keys on counter
+  // and would otherwise discard every block after the first).
+  if (aps.extendedHeader) {
+    static uint8_t fragBuf[FRAG_ASDU_LEN + FRAG_BLOCK_SIZE];
+    static ZigbeeApsReassembler reasm;
+    static bool reasmInit = false;
+    if (!reasmInit) { reasm.begin(fragBuf, sizeof(fragBuf), FRAG_BLOCK_SIZE);
+                      reasmInit = true; }
+    ApsFragmentInfo fi = ApsFragmentInfo();
+    fi.valid = true;
+    fi.counter = aps.counter;
+    fi.firstBlock = aps.firstBlock;
+    fi.blockNumber = aps.blockNumber;
+    fi.payload = aps.payload;
+    fi.payloadLen = aps.payloadLen;
+    bool complete = reasm.addBlock(fi);
+    Serial.print("FRAG rx ");
+    Serial.print(aps.firstBlock ? "first total=" : "idx=");
+    Serial.print(aps.blockNumber);
+    Serial.print(" cnt="); Serial.print(aps.counter);
+    Serial.print(" len="); Serial.print(aps.payloadLen);
+    Serial.print(" from 0x"); printHex16(nwk.srcShort);
+    if (complete) {
+      bool good = reasm.length() == FRAG_ASDU_LEN;
+      for (uint16_t i = 0; good && i < reasm.length(); ++i)
+        if (reasm.payload()[i] != (uint8_t)('A' + (i % 26))) good = false;
+      Serial.print(" -> REASSEMBLED "); Serial.print(reasm.length());
+      Serial.println(good ? "B OK" : "B MISMATCH");
+    } else {
+      Serial.println();
+    }
+    return;
+  }
+#endif
+
   // A retransmit that reached us must STILL be acked (the sender lost the
   // previous ACK), but the duplicate must not be processed by the app twice.
   bool isNew = apsDupe.checkAndRecord(nwk.srcShort, aps.srcEndpoint,
@@ -1007,6 +1055,37 @@ void serviceRouteDiscovery() {
   // retransmits that have come due in between.
   if ((int32_t)(millis() - nextApsSendAt) >= 0) {
     nextApsSendAt = millis() + 10000;
+#if NIUS_ZIGBEE_FRAGTEST
+    // Phase 2: send a long ASDU as APS fragments over the routed path. Each block
+    // is one frame; the coordinator reassembles by APS counter in onApsData.
+    uint8_t big[FRAG_ASDU_LEN];
+    for (uint8_t i = 0; i < sizeof(big); ++i) big[i] = (uint8_t)('A' + (i % 26));
+    ZigbeeApsFragmenter frag;
+    frag.begin(big, sizeof(big), FRAG_BLOCK_SIZE, APS_ENDPOINT, APS_CLUSTER,
+               APS_PROFILE, APS_ENDPOINT, apsCounter);
+    uint8_t total = frag.totalBlocks(), sent = 0;
+    uint8_t fapdu[ZigbeeApsFragment::kHeaderLen + FRAG_BLOCK_SIZE];
+    while (!frag.done()) {
+      uint8_t n = frag.next(fapdu, sizeof(fapdu), /*ackRequest=*/false);
+      if (n == 0) break;
+      // The MAC TX is per-hop acked with no built-in retry, and a relay busy
+      // forwarding the previous block won't ACK the next - so retry each block
+      // a few times and pace them so the line clears between fragments.
+      bool ok = false;
+      for (uint8_t t = 0; t < 6 && !ok; ++t) {
+        ok = sendApsRouted(target, fapdu, n);
+        if (!ok) delay(80);
+      }
+      if (ok) ++sent;
+      delay(150);  // let the relay forward this block before the next
+    }
+    Serial.print("FRAG send asdu="); Serial.print((unsigned)sizeof(big));
+    Serial.print("B cnt="); Serial.print(apsCounter);
+    Serial.print(" blocks="); Serial.print(sent); Serial.print("/");
+    Serial.print(total); Serial.print(" -> 0x"); printHex16(target);
+    Serial.println();
+    ++apsCounter;
+#else
     char msg[16];
     int len = snprintf(msg, sizeof(msg), "aps %lu", (unsigned long)++apsSeq);
     uint8_t apdu[ZigbeeAps::kMaxFrame];
@@ -1023,6 +1102,7 @@ void serviceRouteDiscovery() {
     Serial.print(" -> 0x"); printHex16(target);
     Serial.println(ok ? "" : " (tx FAILED)");
     ++apsCounter;
+#endif
   }
 
   // Periodically map the network: ask the coordinator for its neighbor table
