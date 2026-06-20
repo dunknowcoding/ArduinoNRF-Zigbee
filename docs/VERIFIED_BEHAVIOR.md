@@ -94,6 +94,29 @@ rare re-joins. (Residual sub-100% over long runs is base RF on the co-located
 bench - retransmit-spacing and channel-20 experiments did not beat channel 15,
 confirming it is environmental, not a stack defect.)
 
+### Phase 2 integration: APS fragmentation + binding over multi-hop
+
+Both run on the same 4-board 3-hop line (`-DNIUS_ZIGBEE_LINE_TOPO=1
+-DNIUS_ZIGBEE_IGNORE_SAVED=1`):
+
+- **APS fragmentation** (`-DNIUS_ZIGBEE_FRAGTEST=1`): the end device fragments a
+  120-byte ASDU into three 40-byte blocks and sends them over D->C->B->A; the
+  coordinator reassembles by APS counter. D logs `FRAG send asdu=120B blocks=3/3`;
+  A logs `FRAG rx first total=3` / `idx=1` / `idx=2 -> REASSEMBLED 120B OK` (the
+  reassembled bytes are content-verified). This surfaced and fixed a real bug: the
+  APS extended-header-present FCF bit was `0x08`, which collides with the
+  delivery-mode field, so fragments were spec-non-compliant and rejected by any
+  conformant APS parser (and by `ZigbeeAps::parseDataFrame`, which had been
+  rejecting ext-header frames outright). Corrected to `0x80`; `parseDataFrame` now
+  accepts ext-header unicast data and exposes `firstBlock`/`blockNumber`.
+- **Binding-driven indirect transmit** (`-DNIUS_ZIGBEE_BINDTEST=1`): the end
+  device installs a source binding (its On/Off endpoint -> the coordinator) and
+  unicasts a ZCL Toggle to whatever is bound, resolving the destination through
+  `ZigbeeBindingTable` rather than a hard-coded address. D logs
+  `BIND tx Toggle via 1 binding(s) -> delivered=1`; the coordinator logs
+  `BIND rx On/Off from 0x.... -> LED=ON / OFF` alternating - bind-then-control
+  across the mesh.
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`

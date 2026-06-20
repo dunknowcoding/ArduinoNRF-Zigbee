@@ -281,8 +281,11 @@ while preserving the existing raw send / receive / sniffer APIs.
    reclaims entries after nwkNetworkBroadcastDeliveryTime (~9 s); the table
    recycles the oldest slot when full. `CC2530_BroadcastTable` self-tests it
    22/22 on hardware (dedup, passive-ack suppression, retry cap, expiry +
-   recycle). What remains: wire it into the example's broadcast RX/TX path
-   (RREQ, Link Status, Device_annce) so relays dedup + passively-ack on air.
+   recycle). Reassessed during Phase 2: the on-air example does NOT need it - NWK
+   security's per-(source, frame-counter) replay check already drops duplicate
+   rebroadcasts at every relay, so an app-layer broadcast transaction table is
+   redundant on this stack. The data structure remains available for callers that
+   run NWK without security. (Phase 2 broadcast item: closed by this finding.)
 3. **Indirect transmission / sleepy end devices** - host-side DONE (frame +
    queue + self-test); on-air pending bit needs CC2530 firmware. A sleepy child
    polls its parent with a MAC Data Request (`ZigbeeMac::buildDataRequest`:
@@ -367,18 +370,24 @@ while preserving the existing raw send / receive / sniffer APIs.
    destination. `ZigbeeZdo` builds/parses Bind_req / Unbind_req (IEEE mode 22
    B, group mode 15 B) and Bind_rsp. The `CC2530_Binding` example self-tests
    the table and frame round-trips (13/13 PASS on hardware) and shows the
-   indirect-send walk. Remaining here: wiring the binding into an over-the-air
-   APSDE indirect transmit in the mesh example.
-   **APS fragmentation - DONE.** `ZigbeeApsFragment` builds/parses fragment
-   APDUs (APS extended header: extFCF first/subsequent + block number; first
-   fragment carries the total block count), and `ZigbeeApsReassembler`
-   reassembles by block number with a caller-supplied block size so
-   out-of-order and duplicate blocks are handled. The `CC2530_Fragmentation`
-   example self-tests a 180 B ASDU -> 5 fragments -> reassembly in order,
-   reversed, and with a duplicate block (6/6 PASS on hardware). This is the
-   general fix for long frames over the air, including the long Mgmt_Lqi
-   response - wiring fragmentation into the multi-hop send/receive path is the
-   remaining integration step.
+   indirect-send walk. **On-air wiring DONE** (Phase 2): `CC2530_BeaconJoin
+   -DNIUS_ZIGBEE_BINDTEST=1` installs a source binding (On/Off endpoint -> the
+   coordinator) and unicasts a ZCL Toggle resolved through the binding table;
+   bench-verified over the 3-hop line (D "BIND tx ... delivered=1", coordinator
+   "BIND rx On/Off -> LED=ON/OFF"). See docs/VERIFIED_BEHAVIOR.md.
+   **APS fragmentation - DONE, including on-air (Phase 2).** `ZigbeeApsFragment`
+   builds/parses fragment APDUs (APS extended header: extFCF first/subsequent +
+   block number; first fragment carries the total block count), and
+   `ZigbeeApsReassembler` reassembles by block number with a caller-supplied
+   block size so out-of-order and duplicate blocks are handled. The
+   `CC2530_Fragmentation` example self-tests a 180 B ASDU -> 5 fragments ->
+   reassembly (6/6 PASS) and now also round-trips a fragment through
+   `ZigbeeAps::parseDataFrame`. Multi-hop wiring is bench-verified via
+   `CC2530_BeaconJoin -DNIUS_ZIGBEE_FRAGTEST=1` (120 B ASDU -> 3 blocks over
+   D->C->B->A -> "REASSEMBLED 120B OK"). Phase 2 also fixed a real bug: the APS
+   ext-header FCF bit was 0x08 (collides with delivery mode) and parseDataFrame
+   rejected ext-header frames - so fragmentation could never be received on air;
+   the bit is now 0x80 and parseDataFrame accepts ext-header unicast data.
 7. **PAN ID conflict resolution and network update** - frames + detection DONE.
    `ZigbeePanIdConflict` provides the conflict test (same 16-bit PAN ID +
    different 64-bit extended PAN ID = a real clash, not our own network) and
