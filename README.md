@@ -2,7 +2,7 @@
 
 Host-side drivers that let an **ArduinoNRF (nRF52840)** board drive an external
 **Zigbee / IEEE 802.15.4 radio** (the cheap AliExpress **CC2530** module) over a
-UART — and, on top of that radio, an essentially **full host-side Zigbee 3.0
+UART — and, on top of that radio, a **complete host-side Zigbee 3.0 / Zigbee PRO
 stack** implemented natively on the nRF52840. The companion to the
 [ArduinoNRF](https://github.com/dunknowcoding/ArduinoNRF) board package, kept as
 a **separate library** so the board package stays small.
@@ -12,13 +12,16 @@ a **separate library** so the board package stays small.
 - **Raw 802.15.4** send / receive / sniff on the CC2530, with a bundled SDCC
   transceiver firmware (no TI Z-Stack needed; the module is flashed once over its
   debug port by the board package's built-in `CCDebugger`).
-- **A near-complete Zigbee 3.0 stack, host-side on the nRF52840:** active scan +
-  join, AODV routing + source routing, multi-hop forwarding, AES-CCM* **NWK and
-  APS** security (on the nRF hardware AES), end-to-end acked delivery,
-  fragmentation, group multicast, binding, persistence, Trust-Center key
-  transport + rotation + install codes, BDB / finding-and-binding / **Touchlink**
-  commissioning, **Green Power** (battery-less devices), a dozen ZCL device
-  clusters, and ZDO network management.
+- **A complete Zigbee 3.0 / Zigbee PRO stack, host-side on the nRF52840:** active
+  scan + join, AODV routing + source routing, multi-hop forwarding, AES-CCM*
+  **NWK and APS** security (on the nRF hardware AES), end-to-end acked delivery,
+  multi-hop APS **fragmentation**, group multicast, binding, persistence,
+  Trust-Center key transport + rotation + install codes, BDB / finding-and-binding
+  / **Touchlink** commissioning, **Green Power** (battery-less devices), a dozen
+  ZCL device clusters, and ZDO network management — the full Zigbee PRO surface.
+- **Two module backends:** the native host stack above (default), or drive a
+  CC2530 running **TI Z-Stack ZNP** as a certified-stack coprocessor over the MT
+  API (`CC2530ZnpRadio`).
 - **Verified on air on up to 5 boards** (ProMicro clones + nice!nano v2): a 3-hop
   line at **100%** delivery, a self-healing 2×2 mesh, mesh + Green Power, and
   source-routed delivery. → details in [docs/VERIFIED_BEHAVIOR.md](docs/VERIFIED_BEHAVIOR.md).
