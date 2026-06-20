@@ -181,7 +181,7 @@ Layered on the MAC base; each piece ships with a hardware self-test example.
 
 ## Current stack boundary
 
-NiusZigbee implements essentially the full Zigbee 3.0 surface on top of the SDCC
+NiusZigbee implements the full Zigbee 3.0 / Zigbee PRO surface on top of the SDCC
 CC2530 MAC/PHY backend (MAC frames/association/filtering · NWK scan/join/route/
 source-route/security · APS acked delivery/fragmentation/groups/app encryption ·
 TC key transport + rotation + install codes + BDB/Touchlink commissioning · ZDO
@@ -189,14 +189,18 @@ discovery + management + binding · the ZCL clusters above (On/Off, Level, Color
 Thermostat, Window Covering, Door Lock, IAS Zone, Occupancy, Temperature /
 Humidity / Electrical Measurement, OTA) + Green Power).
 
-It is **not** certified Zigbee PRO (that needs the official test harness). Source-
-routed frames are now NWK-secured on air — the mutable relay-index byte is
-excluded from the CCM* AAD, so a relay can advance it and re-secure under its own
-aux header without breaking the MIC (`radio.sendNwkDataSourceRouted()`; verified
-14/14 by `CC2530_SourceRouteSecurity` on board1). The one remaining firmware-side
-refinement is setting the ack frame-pending bit for sleepy children (needs CC2530
-firmware support). A future ZNP / Z-Stack backend can still live beside the raw
-driver. Milestone status: [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
+It is **not** certified Zigbee PRO (that needs the official test harness), but the
+technical surface is complete. Source-routed frames are NWK-secured on air — the
+mutable relay-index byte is excluded from the CCM* AAD, so a relay can advance it
+and re-secure under its own aux header without breaking the MIC
+(`radio.sendNwkDataSourceRouted()`; verified 14/14 by `CC2530_SourceRouteSecurity`
+on board1). Sleepy-child support is done end to end: the host queues indirect
+traffic and the CC2530 **v0.5** firmware sets the auto-ACK frame-pending bit
+(`FRMCTRL1.PENDING_OR`, via `radio.setFramePending()`) so a polling child learns
+when data is waiting. A **second backend** now lives beside the raw driver —
+`CC2530ZnpRadio` drives a CC2530 running TI Z-Stack ZNP over the MT API (on-air
+bring-up gated on an IAR build of the ZNP image). Milestone status:
+[docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
 
 ## Extending to new modules
 
