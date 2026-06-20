@@ -15,11 +15,13 @@ const uint8_t SYS_PING = 0x01;        // SREQ
 const uint8_t SYS_VERSION = 0x02;     // SREQ
 const uint8_t SYS_OSAL_NV_WRITE = 0x09;  // SREQ
 // ZDO subsystem.
-const uint8_t ZDO_STARTUP_FROM_APP = 0x40;  // SREQ
-const uint8_t ZDO_STATE_CHANGE_IND = 0xC0;  // AREQ
+const uint8_t ZDO_STARTUP_FROM_APP = 0x40;       // SREQ
+const uint8_t ZDO_MGMT_PERMIT_JOIN_REQ = 0x36;   // SREQ
+const uint8_t ZDO_STATE_CHANGE_IND = 0xC0;       // AREQ
 // AF subsystem.
 const uint8_t AF_REGISTER = 0x00;      // SREQ
 const uint8_t AF_DATA_REQUEST = 0x01;  // SREQ
+const uint8_t AF_DATA_CONFIRM = 0x80;  // AREQ
 const uint8_t AF_INCOMING_MSG = 0x81;  // AREQ
 // UTIL subsystem.
 const uint8_t UTIL_GET_DEVICE_INFO = 0x00;  // SREQ
@@ -38,7 +40,7 @@ CC2530ZnpRadio::CC2530ZnpRadio(HardwareSerial& serial)
       frmCmd0_(0), frmCmd1_(0), frmLen_(0),
       respLen_(0),
       capabilities_(0),
-      incomingCb_(nullptr), stateCb_(nullptr) {}
+      incomingCb_(nullptr), stateCb_(nullptr), dataConfirmCb_(nullptr) {}
 
 bool CC2530ZnpRadio::begin(uint32_t baud) {
   serial_->begin(baud);
@@ -157,6 +159,11 @@ void CC2530ZnpRadio::dispatchAreq() {
     incomingCb_(m);
     return;
   }
+  // AF data confirm (delivery result of a prior sendData).
+  if (frmCmd0_ == (uint8_t)(kTypeAreq | kSubAf) && frmCmd1_ == AF_DATA_CONFIRM) {
+    if (dataConfirmCb_ && frmLen_ >= 3) dataConfirmCb_(frm_[0], frm_[1], frm_[2]);
+    return;
+  }
   // ZDO device-state change.
   if (frmCmd0_ == (uint8_t)(kTypeAreq | kSubZdo) &&
       frmCmd1_ == ZDO_STATE_CHANGE_IND) {
@@ -265,6 +272,18 @@ bool CC2530ZnpRadio::startupFromApp(uint16_t startDelayMs, uint8_t& statusOut) {
   if (!sreq(kSubZdo, ZDO_STARTUP_FROM_APP, d, 2)) return false;
   statusOut = respLen_ >= 1 ? resp_[0] : 0xFF;
   return true;
+}
+
+bool CC2530ZnpRadio::permitJoin(uint8_t seconds) {
+  // AddrMode 0x0F = broadcast; 0xFFFC = all routers + coordinator.
+  uint8_t d[5];
+  d[0] = 0x0F;
+  d[1] = 0xFC;
+  d[2] = 0xFF;
+  d[3] = seconds;
+  d[4] = 0x00;  // TCSignificance (ignored on most stacks)
+  if (!sreq(kSubZdo, ZDO_MGMT_PERMIT_JOIN_REQ, d, sizeof(d))) return false;
+  return respLen_ >= 1 && resp_[0] == 0;
 }
 
 bool CC2530ZnpRadio::registerEndpoint(uint8_t endpoint, uint16_t profileId,

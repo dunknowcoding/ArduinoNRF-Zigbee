@@ -73,6 +73,10 @@ struct ZnpIncomingMsg {
 
 typedef void (*ZnpIncomingCallback)(const ZnpIncomingMsg& msg);
 typedef void (*ZnpStateChangeCallback)(uint8_t deviceState);
+// AF_DATA_CONFIRM: the over-the-air result of a prior sendData(), matched by
+// transId. status 0 = delivered (APS-acked if requested).
+typedef void (*ZnpDataConfirmCallback)(uint8_t status, uint8_t endpoint,
+                                       uint8_t transId);
 
 class CC2530ZnpRadio {
  public:
@@ -130,13 +134,21 @@ class CC2530ZnpRadio {
                         uint8_t numIn, const uint16_t* outClusters,
                         uint8_t numOut);
 
-  /** AF_DATA_REQUEST: unicast an AF message. @return SRSP status (0 = success). */
+  /** AF_DATA_REQUEST: unicast an AF message. @return SRSP status (0 = success).
+      Actual over-the-air delivery is reported later via the data-confirm
+      callback, keyed by the same transId. */
   bool sendData(uint16_t dstAddr, uint8_t dstEndpoint, uint8_t srcEndpoint,
                 uint16_t clusterId, uint8_t transId, const uint8_t* data,
                 uint8_t len, uint8_t radius = 30, bool ackRequest = true);
 
+  /** ZDO_MGMT_PERMIT_JOIN_REQ: open the network to joiners for @p seconds (0 =
+      close, 0xFF = permanently). Broadcast to all routers + the coordinator.
+      @return SRSP status (0 = success). */
+  bool permitJoin(uint8_t seconds);
+
   void onIncoming(ZnpIncomingCallback cb) { incomingCb_ = cb; }
   void onStateChange(ZnpStateChangeCallback cb) { stateCb_ = cb; }
+  void onDataConfirm(ZnpDataConfirmCallback cb) { dataConfirmCb_ = cb; }
 
   /** Pump the UART: dispatches AREQ indications (incoming msgs, state changes).
       Call frequently from loop(). */
@@ -196,6 +208,7 @@ class CC2530ZnpRadio {
 
   ZnpIncomingCallback incomingCb_;
   ZnpStateChangeCallback stateCb_;
+  ZnpDataConfirmCallback dataConfirmCb_;
 };
 
 }  // namespace nzb

@@ -8,18 +8,31 @@ with **IAR Embedded Workbench for 8051** - it is not buildable with SDCC.
 
 ## What to build
 
-Use TI's Z-Stack for CC2530 (Z-Stack 3.0.x / Home Automation 1.2.x both expose
-the same MT API this driver uses). The ZNP application is the `znp` sample:
+The driver speaks the standard Z-Stack MT API, so any of TI's Z-Stack-CC2530
+releases work (Z-Stack 3.0.2 or Z-Stack Home 1.2.2a both expose the SYS / ZDO /
+AF / UTIL MT commands this driver uses). The ZNP application is shipped as a
+ready sample - you build it as-is, no app code to write.
 
-- Project: `Projects/zstack/ZNP/CC2530DB/znp.eww`
-- Configuration: `CC2530-ProSecure` (or `CC2530F256`), UART transport.
-- Confirm these MT subsystems are enabled (they back this driver):
-  `MT_SYS_FUNC`, `MT_ZDO_FUNC`, `MT_AF_FUNC`, `MT_UTIL_FUNC`, and
-  `MT_TASK` / `ZAPP_P1` so the MT API is served over the serial port.
-- Transport: **UART**, 115200 baud, no flow control - matches `begin()`'s
-  default and the wiring used by the SDCC firmware (Serial1).
+1. **Install** TI Z-Stack-CC2530 (the installer drops the tree under
+   `C:\Texas Instruments\Z-Stack ...`) and **IAR EW for 8051** (8.30+).
+2. **Open** the ZNP workspace in IAR:
+   `Projects/zstack/ZNP/CC2530DB/znp.eww`.
+3. **Pick the build configuration** for the part: `CC2530F256` (the common
+   AliExpress module). Use a *secure* variant (e.g. `...ProSecure`) so AES is on.
+4. **Confirm the MT transport + subsystems** in the project's predefined symbols
+   (Project > Options > C/C++ Compiler > Preprocessor). The stock ZNP config
+   already sets these; verify they are present because the driver depends on them:
+   - `MT_TASK`, `MT_SYS_FUNC`, `MT_ZDO_FUNC`, `MT_ZDO_MGMT_FUNC`, `MT_AF_FUNC`,
+     `MT_UTIL_FUNC` - serve the SYS/ZDO/AF/UTIL commands.
+   - `ZAPP_P2` (UART transport to the app/host) and the default
+     `MT_UART_DEFAULT_BAUDRATE = HAL_UART_BR_115200`, **no** flow control -
+     matches `begin()`'s 115200 and the same wiring as the SDCC firmware (the nRF
+     `Serial1` <-> CC2530 P0.2/P0.3).
+5. **Build** (F7). The image lands in the configuration's `Exe/` folder.
+6. **Copy** the resulting hex here as `cc2530znp.hex`.
 
-Build in IAR and export the result as `cc2530znp.hex` next to this file.
+> Tip: the ZNP sample also exposes `MT_UART` over the debug-UART pins; make sure
+> the configuration routes MT to the same UART you have wired to the nRF.
 
 ## Flashing
 
