@@ -942,14 +942,21 @@ void serviceRouteDiscovery() {
   if (!keyInstalled) return;  // no secured traffic until the network key arrives
 #endif
 
-  // End-device route repair: if deliveries to the coordinator have stalled for a
-  // while, our parent is probably gone - drop the stale route and re-scan for a
-  // new parent (in a 2x2 mesh, the surviving router takes over).
+  // End-device route repair: if deliveries to the coordinator have stalled,
+  // re-discover the ROUTE (AODV RREQ) rather than re-scanning/re-associating.
+  // A full re-scan resets our short address AND outgoing frame counter, which the
+  // coordinator then sees as a replay (counter went backwards) and rejects every
+  // frame until it catches up - a churn storm that makes a transient stall
+  // permanent. Genuine parent loss is handled separately by
+  // serviceLinkStatusAndAging() -> rejoinParent(); here we only drop the stale
+  // route + discovery state so the next loop originates a fresh RREQ, keeping our
+  // address/parent/counter stable. (Two-tier repair: route first, parent later.)
   if (lastApsOkAt != 0 && (int32_t)(millis() - lastApsOkAt) > 25000) {
-    Serial.println("end-device route repair: APS to coord stalled - re-scanning");
+    Serial.println("end-device route repair: APS to coord stalled - rediscovering route");
     routes.remove(ZB_NWK_ADDR_COORDINATOR);
+    routing.expire();        // clear discovery bookkeeping so a new RREQ is sent
+    nextDiscoveryAt = millis();
     lastApsOkAt = millis();  // grace period before another repair attempt
-    runActiveScan();
     return;
   }
 
