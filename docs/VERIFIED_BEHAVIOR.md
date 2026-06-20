@@ -117,6 +117,22 @@ Both run on the same 4-board 3-hop line (`-DNIUS_ZIGBEE_LINE_TOPO=1
   `BIND rx On/Off from 0x.... -> LED=ON / OFF` alternating - bind-then-control
   across the mesh.
 
+### Second backend: CC2530 + TI Z-Stack ZNP (MT API)
+
+The alternate `CC2530ZnpRadio` backend was brought up on real TI **Z-Stack 3.0.2
+ZNP** firmware (board1's CC2530, flashed via the built-in CCDebugger). Over the MT
+API the host driver reads:
+
+- `SYS_PING` -> capabilities `0x0779`
+- `SYS_VERSION` -> **Z-Stack 2.7.2** (product = ZNP, transport rev 2)
+
+confirming the driver's MT transport/framing against certified firmware (the
+hardware-independent framing is also covered by `CC2530Znp_Mt`). Two TI-binary
+quirks were found + handled: CFG pins must be strapped for UART (`P2.0`->GND) with
+flow control satisfied (`P0.4`->GND), and the with-SBL image's serial bootloader
+waits ~60 s before the app runs (`waitUntilResponsive()` polls across it). See
+`extras/firmware/cc2530znp/BUILD.md`.
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`
