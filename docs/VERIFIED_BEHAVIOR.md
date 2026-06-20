@@ -68,6 +68,32 @@ v0.8.0 <-> earlier-build interop check). The line came up with
   climbing). **rpl=0** confirms the new per-(IEEE,key-seq) replay identity does
   not false-positive on the live network.
 
+### Clean all-v0.8.0 line: 100% delivery with two-tier route repair
+
+Reforming the whole line on v0.8.0 with a clean bring-up
+(`-DNIUS_ZIGBEE_LINE_TOPO=1 -DNIUS_ZIGBEE_IGNORE_SAVED=1` on all four boards)
+exposed two issues that were then fixed:
+
+1. **Stale-state restore.** Without `IGNORE_SAVED`, boards restore a saved
+   address/route from flash ("RESTORED from flash, skipping scan"), the routes
+   are inconsistent with the freshly-formed line, forwarding never starts
+   (`fwd=0`) and delivery is 0. A clean `IGNORE_SAVED` bring-up forms the line
+   with forwarding working (`fwd`>0 on the routers).
+2. **Route-repair churn storm.** The end-device route repair used to re-scan /
+   re-associate on a stall, which reset the device's short address AND outgoing
+   frame counter; the coordinator then replay-rejected every frame until it
+   caught up (`rpl` into the 100s, address cycling 0x0061->62->63->64, delivery
+   collapsing to ~40%). The two-tier repair (re-discover the route first, keep
+   address/counter stable; re-scan only after a persistent ~60 s stall) removes
+   the storm.
+
+Result on the 3-hop secured line (board1 A / B / C / D, channel 15): a clean
+window reaches **`aps[q=30 ok=30 rtx=19 drop=0]` = 100% delivery** with
+`rtx ~0.6/frame` (was ~4.3) and `rpl ~0`; sustained delivery is ~95% with only
+rare re-joins. (Residual sub-100% over long runs is base RF on the co-located
+bench - retransmit-spacing and channel-20 experiments did not beat channel 15,
+confirming it is environmental, not a stack defect.)
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`
