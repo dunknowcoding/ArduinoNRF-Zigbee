@@ -51,17 +51,46 @@ bool CC2530ZnpRadio::begin(uint32_t baud) {
   return ping();
 }
 
+uint8_t CC2530ZnpRadio::computeFcs(uint8_t len, uint8_t cmd0, uint8_t cmd1,
+                                   const uint8_t* data) {
+  uint8_t fcs = (uint8_t)(len ^ cmd0 ^ cmd1);
+  for (uint8_t i = 0; i < len; ++i) fcs ^= data[i];
+  return fcs;
+}
+
+uint8_t CC2530ZnpRadio::encodeFrame(uint8_t* out, uint8_t outMax, uint8_t cmd0,
+                                    uint8_t cmd1, const uint8_t* data,
+                                    uint8_t len) {
+  if (!out || (uint16_t)len + 5 > outMax) return 0;  // SOF+LEN+CMD0+CMD1+DATA+FCS
+  out[0] = kSof;
+  out[1] = len;
+  out[2] = cmd0;
+  out[3] = cmd1;
+  for (uint8_t i = 0; i < len; ++i) out[4 + i] = data[i];
+  out[4 + len] = computeFcs(len, cmd0, cmd1, data);
+  return (uint8_t)(5 + len);
+}
+
+bool CC2530ZnpRadio::decodeFrame(const uint8_t* in, uint8_t inLen, uint8_t& cmd0,
+                                 uint8_t& cmd1, const uint8_t** data,
+                                 uint8_t& dataLen) {
+  if (!in || inLen < 5 || in[0] != kSof) return false;
+  uint8_t len = in[1];
+  if ((uint16_t)len + 5 != inLen) return false;
+  cmd0 = in[2];
+  cmd1 = in[3];
+  if (computeFcs(len, cmd0, cmd1, &in[4]) != in[4 + len]) return false;
+  *data = &in[4];
+  dataLen = len;
+  return true;
+}
+
 void CC2530ZnpRadio::sendMt(uint8_t type, uint8_t sub, uint8_t cmd1,
                             const uint8_t* data, uint8_t len) {
   uint8_t cmd0 = (uint8_t)(type | (sub & 0x1F));
-  uint8_t fcs = (uint8_t)(len ^ cmd0 ^ cmd1);
-  for (uint8_t i = 0; i < len; ++i) fcs ^= data[i];
-  serial_->write(kSof);
-  serial_->write(len);
-  serial_->write(cmd0);
-  serial_->write(cmd1);
-  for (uint8_t i = 0; i < len; ++i) serial_->write(data[i]);
-  serial_->write(fcs);
+  uint8_t frame[5 + kMaxData];
+  uint8_t n = encodeFrame(frame, sizeof(frame), cmd0, cmd1, data, len);
+  for (uint8_t i = 0; i < n; ++i) serial_->write(frame[i]);
 }
 
 bool CC2530ZnpRadio::feed(uint8_t b) {

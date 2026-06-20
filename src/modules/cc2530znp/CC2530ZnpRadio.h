@@ -142,6 +142,23 @@ class CC2530ZnpRadio {
       Call frequently from loop(). */
   void poll();
 
+  // --- MT framing primitives (static, hardware-independent; unit-testable) ---
+
+  /** MT frame check sequence: XOR over LEN, CMD0, CMD1 and every DATA byte. */
+  static uint8_t computeFcs(uint8_t len, uint8_t cmd0, uint8_t cmd1,
+                            const uint8_t* data);
+
+  /** Encode a complete MT frame (SOF LEN CMD0 CMD1 DATA FCS) into @p out.
+      @return the frame length, or 0 if it would not fit. */
+  static uint8_t encodeFrame(uint8_t* out, uint8_t outMax, uint8_t cmd0,
+                             uint8_t cmd1, const uint8_t* data, uint8_t len);
+
+  /** Decode + FCS-check one complete MT frame buffer (as produced by
+      encodeFrame). On success sets cmd0/cmd1 and points @p data at the payload
+      inside @p in. @return true if the frame is well-formed and the FCS matches. */
+  static bool decodeFrame(const uint8_t* in, uint8_t inLen, uint8_t& cmd0,
+                          uint8_t& cmd1, const uint8_t** data, uint8_t& dataLen);
+
  private:
   // Build + send an MT frame. type = kTypeSreq/kTypeAreq, sub = subsystem.
   void sendMt(uint8_t type, uint8_t sub, uint8_t cmd1, const uint8_t* data,
