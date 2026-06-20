@@ -120,6 +120,16 @@
 static const uint16_t FRAG_ASDU_LEN = 120;   // long test ASDU (needs fragmenting)
 static const uint8_t FRAG_BLOCK_SIZE = 40;   // per-fragment block size -> 3 blocks
 
+// Binding-driven indirect transmit: when enabled, the end device adds a source
+// binding (its On/Off endpoint -> the coordinator) and periodically sends a ZCL
+// Toggle to whatever is bound, resolving the destination through the binding
+// table instead of a hard-coded address - the bind-then-control model. The
+// binding table is self-tested in CC2530_Binding; this is its on-air wiring.
+// Build with -DNIUS_ZIGBEE_BINDTEST=1.
+#ifndef NIUS_ZIGBEE_BINDTEST
+#define NIUS_ZIGBEE_BINDTEST 0
+#endif
+
 static const uint16_t PAN_ID = NIUS_ZIGBEE_PAN_ID;
 static const uint64_t EXT_PAN_ID = 0x1A62195E00000000ULL;
 static const uint8_t COORD_CHANNEL = 15;
@@ -301,6 +311,15 @@ ZigbeeGroupTable groups(groupStorage, 4);
 bool groupOnOff = false;             // local On/Off state, mirrored on the LED
 uint8_t groupZclSeq = 0;
 uint32_t nextGroupCastAt = 12000;    // coordinator broadcasts ~8 s apart
+#endif
+
+#if NIUS_ZIGBEE_BINDTEST
+static const uint64_t COORD_IEEE = 0x1A62195E00000000ULL | 0x0001;  // node A's IEEE
+ZigbeeBinding bindStorage[4];
+ZigbeeBindingTable bindings(bindStorage, 4);
+bool bindAdded = false;              // end device: source binding installed once
+uint8_t bindZclSeq = 0;
+bool bindOnOff = false;              // coordinator: bound On/Off state on the LED
 #endif
 
 // Application-level reliable ZDO query: the Mgmt_Lqi_rsp is the acknowledgement,
@@ -896,6 +915,21 @@ void onApsData(const MacDataFrame& mac, const NwkDataFrame& nwk,
     return;
   }
 #endif
+#if NIUS_ZIGBEE_BINDTEST
+  // Binding-driven control: a unicast On/Off command (delivered via the sender's
+  // binding) toggles this node's LED - the bound "light" end of the demo.
+  if (aps.deliveryMode == APS_DELIVERY_UNICAST &&
+      aps.clusterId == ZigbeeZcl::kClusterOnOff) {
+    ZclFrame zcl;
+    if (ZigbeeZcl::parseFrame(aps.payload, aps.payloadLen, zcl)) {
+      ZigbeeZcl::applyOnOffCommand(zcl.commandId, bindOnOff);
+      digitalWrite(LED_BUILTIN, bindOnOff ? HIGH : LOW);
+      Serial.print("BIND rx On/Off from 0x"); printHex16(nwk.srcShort);
+      Serial.print(" -> LED="); Serial.println(bindOnOff ? "ON" : "OFF");
+    }
+    return;
+  }
+#endif
   if (aps.clusterId != APS_CLUSTER) return;  // leave ZDO etc. alone
 
 #if NIUS_ZIGBEE_FRAGTEST
@@ -1085,6 +1119,42 @@ void serviceRouteDiscovery() {
     Serial.print(total); Serial.print(" -> 0x"); printHex16(target);
     Serial.println();
     ++apsCounter;
+#elif NIUS_ZIGBEE_BINDTEST
+    // Phase 2: binding-driven indirect transmit. Install a source binding once
+    // (this endpoint's On/Off -> the coordinator), then send a ZCL Toggle to
+    // every bound destination - the address comes from the binding table.
+    if (!bindAdded) {
+      ZigbeeBinding b = ZigbeeBinding();
+      b.srcIeee = THIS_IEEE;
+      b.srcEndpoint = APS_ENDPOINT;
+      b.clusterId = ZigbeeZcl::kClusterOnOff;
+      b.dstAddrMode = ZB_BIND_ADDR_IEEE;
+      b.dstIeee = COORD_IEEE;
+      b.dstEndpoint = APS_ENDPOINT;
+      bindAdded = bindings.add(b);
+    }
+    {
+      uint8_t zcl[8];
+      uint8_t zn = ZigbeeZcl::buildCommandFrame(
+          zcl, sizeof(zcl), nzb::ZCL_FRAME_CLUSTER_SPECIFIC, bindZclSeq++,
+          ZCL_ON_OFF_CMD_TOGGLE, nullptr, 0);
+      uint8_t cursor = 0, delivered = 0;
+      const ZigbeeBinding* bn;
+      while ((bn = bindings.next(APS_ENDPOINT, ZigbeeZcl::kClusterOnOff,
+                                 cursor)) != nullptr) {
+        // Resolve the bound IEEE to a short address. The only bound peer in this
+        // demo is the coordinator (short 0x0000); others are skipped.
+        if (bn->dstIeee != COORD_IEEE) continue;
+        uint8_t apdu[ZigbeeAps::kMaxFrame];
+        uint8_t n = ZigbeeAps::buildDataFrame(
+            apdu, sizeof(apdu), bn->dstEndpoint, ZigbeeZcl::kClusterOnOff,
+            APS_PROFILE, APS_ENDPOINT, apsCounter++, zcl, zn,
+            /*ackRequest=*/false);
+        if (sendApsRouted(ZB_NWK_ADDR_COORDINATOR, apdu, n)) ++delivered;
+      }
+      Serial.print("BIND tx Toggle via "); Serial.print(bindings.count());
+      Serial.print(" binding(s) -> delivered="); Serial.println(delivered);
+    }
 #else
     char msg[16];
     int len = snprintf(msg, sizeof(msg), "aps %lu", (unsigned long)++apsSeq);
