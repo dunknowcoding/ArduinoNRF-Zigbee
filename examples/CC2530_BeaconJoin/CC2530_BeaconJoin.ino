@@ -252,6 +252,7 @@ uint32_t apsSeq = 0, nextApsSendAt = 0;
 // Last time an APS delivery to the coordinator succeeded; if this goes stale the
 // end device assumes its parent is gone and re-scans (route repair).
 uint32_t lastApsOkAt = 0;
+uint32_t lastRouteRepairAt = 0;  // paces tier-1 route re-discovery during a stall
 
 #if NIUS_ZIGBEE_SOURCEROUTE
 // Concentrator (A) source-route state: the path A->...->D learned from D's route
@@ -951,13 +952,33 @@ void serviceRouteDiscovery() {
   // serviceLinkStatusAndAging() -> rejoinParent(); here we only drop the stale
   // route + discovery state so the next loop originates a fresh RREQ, keeping our
   // address/parent/counter stable. (Two-tier repair: route first, parent later.)
-  if (lastApsOkAt != 0 && (int32_t)(millis() - lastApsOkAt) > 25000) {
-    Serial.println("end-device route repair: APS to coord stalled - rediscovering route");
-    routes.remove(ZB_NWK_ADDR_COORDINATOR);
-    routing.expire();        // clear discovery bookkeeping so a new RREQ is sent
-    nextDiscoveryAt = millis();
-    lastApsOkAt = millis();  // grace period before another repair attempt
-    return;
+  if (lastApsOkAt != 0) {
+    const int32_t stall = (int32_t)(millis() - lastApsOkAt);
+    if (stall > 60000) {
+      // Tier 2: the stall has PERSISTED through repeated route re-discovery, so the
+      // parent is probably genuinely gone - fall back to a full re-scan/re-join.
+      Serial.println("end-device route repair: persistent stall - re-scanning");
+      routes.remove(ZB_NWK_ADDR_COORDINATOR);
+      lastApsOkAt = millis();
+      lastRouteRepairAt = 0;
+      runActiveScan();
+      return;
+    }
+    if (stall > 25000 &&
+        (lastRouteRepairAt == 0 ||
+         (int32_t)(millis() - lastRouteRepairAt) > 8000)) {
+      // Tier 1: re-discover the ROUTE only (AODV RREQ), paced to ~8 s. This keeps
+      // our short address + outgoing frame counter stable; a full re-scan would
+      // reset the counter and the coordinator would replay-reject every frame
+      // until it caught up (a churn storm that turns a transient stall permanent).
+      // Deliberately do NOT reset lastApsOkAt - tier 2 must see the true stall age.
+      Serial.println("end-device route repair: APS stalled - rediscovering route");
+      routes.remove(ZB_NWK_ADDR_COORDINATOR);
+      routing.expire();        // clear discovery bookkeeping so a new RREQ is sent
+      nextDiscoveryAt = millis();
+      lastRouteRepairAt = millis();
+      return;
+    }
   }
 
   routing.expire();
