@@ -32,6 +32,17 @@ answered with "data pending", then clears it when the queue drains. It is opt-in
 build-verified with SDCC; the on-air frame-pending effect on the auto-ACK should
 be confirmed on the bench with a real sleepy child.
 
+Firmware v0.6 adds **unslotted CSMA-CA** to the transmit path. When CCA TX is
+enabled (`MAC_FLAG_CCA_TX`), instead of the old single-shot `STXONCCA` +
+immediate-retry-on-busy, the radio now waits a random number of backoff periods
+(seeded from the `RFRND` true-random register), re-samples `FSMSTAT1.CCA`, and
+raises the backoff exponent (BE 3..5, up to 4 backoffs) before transmitting -
+the IEEE 802.15.4 channel-access procedure the official Z-Stack MAC uses. This
+is the main on-air behavior our SDCC firmware was missing under congestion; it
+spreads contending transmitters instead of colliding on immediate retries.
+Non-CCA TX keeps the legacy immediate-retry loop. (Next: MAC-ACK-based
+retransmit, the other half of the official MAC's reliability.)
+
 ## UART protocol
 
 ```

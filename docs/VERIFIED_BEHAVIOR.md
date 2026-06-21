@@ -133,6 +133,22 @@ flow control satisfied (`P0.4`->GND), and the with-SBL image's serial bootloader
 waits ~60 s before the app runs (`waitUntilResponsive()` polls across it). See
 `extras/firmware/cc2530znp/BUILD.md`.
 
+### CC2530 firmware v0.6: unslotted CSMA-CA (on-air verified)
+
+The SDCC transceiver firmware v0.6 adds IEEE 802.15.4 **unslotted CSMA-CA** on the
+CCA TX path: on a busy channel `radio_tx` now waits a random exponential backoff
+(software xorshift PRNG seeded per node from the IEEE; no radio-register reads in
+the TX path) and retries with a widening window, instead of the v0.5 immediate
+retry-on-busy. This is the channel-access discipline TI's MAC uses and the main
+on-air gap the SDCC firmware previously had vs ZNP.
+
+On-air verified: a CC2530 flashed with v0.6 **scans, transmits, receives, and
+joins** a coordinator (LINE_TOPO router: `B/router joined=y tx=14 rx=12`, coord
+`children=1`). Note: a *no-topology* `THIS_NODE=0x0004` end config does not run a
+working active scan (`tx=0`); always test end/router devices with a real topology
+flag (`LINE_TOPO`/`MESH_TOPO`). A full multi-hop delivery/congestion comparison vs
+v0.5 and a ZNP node is the next quantitative step.
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`

@@ -28,7 +28,7 @@
  *     0x84 RX_FRAME [rssi lqi psdu..]
  */
 #define FW_VER_HI 0
-#define FW_VER_LO 5
+#define FW_VER_LO 6
 
 /* ---- SFRs ---- */
 __sfr __at (0xF1) PERCFG;
@@ -64,8 +64,11 @@ __xdata __at (0x6189) volatile unsigned char FRMCTRL0;
 __xdata __at (0x618A) volatile unsigned char FRMCTRL1;
 __xdata __at (0x618F) volatile unsigned char FREQCTRL;
 __xdata __at (0x6190) volatile unsigned char TXPOWER;
+__xdata __at (0x6193) volatile unsigned char FSMSTAT1;
 __xdata __at (0x6198) volatile unsigned char RSSI;
+__xdata __at (0x6199) volatile unsigned char RSSISTAT;
 __xdata __at (0x619B) volatile unsigned char RXFIFOCNT;
+__xdata __at (0x61A7) volatile unsigned char RFRND;
 __xdata __at (0x61AB) volatile unsigned char RXCTRL;
 __xdata __at (0x61AC) volatile unsigned char FSCTRL;
 __xdata __at (0x61AE) volatile unsigned char FSCAL1;
@@ -119,9 +122,25 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 #define STROBE_SFLUSHRX   0xED
 #define STROBE_SFLUSHTX   0xEE
 
+/* FSMSTAT1 (0x6193) bits, RSSISTAT (0x6199) bit, used for CSMA-CA. */
+#define FSMSTAT1_CCA      0x10   /* current clear-channel assessment: 1 = clear */
+#define RSSISTAT_VALID    0x01   /* RSSI sample valid (CCA undefined until set) */
+
+/* Unslotted CSMA-CA parameters (IEEE 802.15.4 defaults). On a busy channel the
+   transmitter waits a random number of backoff periods, re-samples CCA, and
+   raises the backoff exponent, instead of hammering the air with immediate
+   retries. This is what the official Z-Stack MAC does and what our previous
+   single-shot STXONCCA did NOT - the main on-air difference under congestion. */
+#define CSMA_MIN_BE       3
+#define CSMA_MAX_BE       5
+#define CSMA_MAX_BACKOFFS 4
+/* ~320 us (one aUnitBackoffPeriod, 20 symbols) of busy-wait at 32 MHz. */
+#define CSMA_BACKOFF_LOOPS 2000U
+
 static __xdata unsigned char rxbuf[140];
 static unsigned char mac_flags = 0;
 static unsigned char tx_retries = 0;
+static unsigned int rng_state = 0xACE1u;   /* CSMA backoff PRNG (software, no radio reads) */
 
 static void clock_init(void){
   CLKCONCMD = 0x80;                 /* 32 MHz XOSC, 32 kHz RC */
@@ -151,6 +170,10 @@ static void set_address(__xdata unsigned char* d){
   SHORT_ADDR0=d[2]; SHORT_ADDR1=d[3];
   EXT_ADDR0=d[4]; EXT_ADDR1=d[5]; EXT_ADDR2=d[6]; EXT_ADDR3=d[7];
   EXT_ADDR4=d[8]; EXT_ADDR5=d[9]; EXT_ADDR6=d[10]; EXT_ADDR7=d[11];
+  /* Seed the CSMA backoff PRNG per node from the IEEE LSBs, so different nodes
+     pick different backoff slots (decorrelates contending transmitters). */
+  rng_state = (unsigned int)d[4] | ((unsigned int)d[5] << 8);
+  if(rng_state == 0u) rng_state = 0xACE1u;
 }
 
 static void radio_init(unsigned char ch){
@@ -177,10 +200,49 @@ static unsigned char radio_tx_once(__xdata unsigned char* psdu, unsigned char le
   RFST=STROBE_SRXON;                /* back to RX */
   return done?0:1;
 }
+/* Software xorshift LFSR for the CSMA backoff. Deliberately does NOT read the
+   RF random register (RFRND): RFRND samples the receiver ADC, and reading it in
+   the TX/backoff path disturbed the radio enough that a just-channel-changed
+   transmitter (the active scan setChannel()s before every beacon request) could
+   never get a frame out (tx=0). A plain PRNG is more than enough to de-correlate
+   backoff slots and never touches the radio. Seeded per node from the IEEE LSBs
+   (set in set_address) so different nodes pick different slots. */
+static unsigned char rng_byte(void){
+  unsigned int x = rng_state;
+  x ^= (unsigned int)(x << 7);
+  x ^= (unsigned int)(x >> 9);
+  x ^= (unsigned int)(x << 8);
+  rng_state = x ? x : 0xACE1u;
+  return (unsigned char)(x & 0xFFu);
+}
+
+/* Busy-wait n aUnitBackoffPeriods (~320 us each). */
+static void backoff_delay(unsigned char periods){
+  unsigned char p; unsigned int t;
+  for(p=0;p<periods;p++){ for(t=0;t<CSMA_BACKOFF_LOOPS;t++){ } }
+}
+
 static unsigned char radio_tx(__xdata unsigned char* psdu, unsigned char len,
                               unsigned char retries, unsigned char* attempts){
-  unsigned char r=1, i, max_attempts;
+  unsigned char r=1, i, be=CSMA_MIN_BE, max_attempts;
   if(len>125){ *attempts=0; return 2; }
+  /* CSMA-CA: radio_tx_once() already does the hardware CCA+TX (STXONCCA, the
+     proven v0.5 path) and returns nonzero when the channel was busy. So just add
+     the 802.15.4 backoff between attempts: on a busy channel, wait a random
+     number of backoff periods and retry with a widening window, instead of
+     hammering immediate retries. Building on radio_tx_once keeps the exact TX
+     sequence that the scan/join path is known to work with - an earlier rewrite
+     that re-implemented the TX inline regressed end-device scanning (tx=0). */
+  if(mac_flags & MAC_FLAG_CCA_TX){
+    for(i=0; i<=CSMA_MAX_BACKOFFS; i++){
+      r=radio_tx_once(psdu,len);
+      *attempts=(unsigned char)(i+1);
+      if(r==0) return 0;
+      backoff_delay((unsigned char)(rng_byte() & (unsigned char)((1u<<be)-1u)));
+      if(be<CSMA_MAX_BE) be++;
+    }
+    return r;
+  }
   max_attempts=(unsigned char)(retries+1);
   for(i=0;i<max_attempts;i++){
     r=radio_tx_once(psdu,len);
