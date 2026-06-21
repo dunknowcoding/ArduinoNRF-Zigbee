@@ -149,6 +149,25 @@ working active scan (`tx=0`); always test end/router devices with a real topolog
 flag (`LINE_TOPO`/`MESH_TOPO`). A full multi-hop delivery/congestion comparison vs
 v0.5 and a ZNP node is the next quantitative step.
 
+### CC2530 firmware v0.7: MAC-level ACK + retransmit (on-air verified)
+
+Firmware v0.7 adds the reliability half of TI's MAC. When a unicast frame requests
+an ACK (FCF.AR), `radio_tx` waits for the matching ACK (same DSN, CRC-valid) and
+retransmits the whole frame (re-running CSMA-CA) up to `macMaxFrameRetries` (3) if
+it does not arrive - so a single lost frame recovers at the MAC in ~ms instead of
+waiting for the slower host APS retransmit. `TXSTAT` now reports the *acked* result.
+A non-ACK frame received during the ACK wait is forwarded to the host as a normal
+`RX_FRAME`, so no inbound traffic is dropped while waiting.
+
+On-air checked: a CC2530 flashed with v0.7 joins a coordinator and exchanges
+traffic cleanly (`B/router addr=0x0002 joined=y rx=6`; coord
+`children=1 tx=151 rx=135 mic=0 rpl=0`) - i.e. the ack-requested association
+handshake and the ack-wait + forward-non-ACK paths run correctly without breaking
+the link. The retransmit-on-loss path is implemented and build-verified, but no
+frame losses occurred in this run to trigger it. A forced-loss retransmit
+measurement and a multi-hop congestion comparison vs v0.5/ZNP remain as
+quantitative follow-ups.
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`

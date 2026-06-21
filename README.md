@@ -197,9 +197,10 @@ and re-secure under its own aux header without breaking the MIC
 on board1). Sleepy-child support is done end to end: the host queues indirect
 traffic and the CC2530 **v0.5** firmware sets the auto-ACK frame-pending bit
 (`FRMCTRL1.PENDING_OR`, via `radio.setFramePending()`) so a polling child learns
-when data is waiting. The CC2530 **v0.6** firmware adds IEEE 802.15.4 unslotted
-**CSMA-CA** (random exponential backoff before TX) on the CCA path, the same
-channel-access discipline TI's MAC uses. A **second backend** now lives beside the raw driver —
+when data is waiting. The CC2530 firmware now matches TI's MAC channel-access and
+reliability: **v0.6** adds IEEE 802.15.4 unslotted **CSMA-CA** (random exponential
+backoff before TX), and **v0.7** adds **MAC-level ACK + retransmit** (wait for the
+ACK, retransmit up to `macMaxFrameRetries` if it is missing). A **second backend** now lives beside the raw driver —
 `CC2530ZnpRadio` drives a CC2530 running TI Z-Stack ZNP over the MT API (on-air
 bring-up gated on an IAR build of the ZNP image). Milestone status:
 [docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).

@@ -40,8 +40,19 @@ raises the backoff exponent (BE 3..5, up to 4 backoffs) before transmitting -
 the IEEE 802.15.4 channel-access procedure the official Z-Stack MAC uses. This
 is the main on-air behavior our SDCC firmware was missing under congestion; it
 spreads contending transmitters instead of colliding on immediate retries.
-Non-CCA TX keeps the legacy immediate-retry loop. (Next: MAC-ACK-based
-retransmit, the other half of the official MAC's reliability.)
+Non-CCA TX keeps the legacy immediate-retry loop.
+
+Firmware v0.7 adds **MAC-level ACK + retransmit** - the other half of the official
+MAC's reliability. When a transmitted frame requests an acknowledgement (FCF.AR),
+the firmware waits for the matching ACK (same DSN, CRC-valid) and, if it does not
+arrive, retransmits the whole frame (re-running CSMA-CA) up to `macMaxFrameRetries`
+(3) times, exactly like TI's MAC for unicast. `TXSTAT` now reflects the *acked*
+result, so the host learns of a delivered-and-acknowledged frame rather than just
+"transmitted". A frame that arrives during the ACK wait but is **not** our ACK is
+forwarded to the host as a normal `RX_FRAME`, so no inbound traffic is dropped
+while waiting. Only ack-requested frames are affected; broadcasts and
+ack-not-requested frames keep the previous behavior. On-air verified: a v0.7 node
+joins and exchanges traffic cleanly (`mic=0 rpl=0`).
 
 ## UART protocol
 

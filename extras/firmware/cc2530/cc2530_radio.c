@@ -28,7 +28,7 @@
  *     0x84 RX_FRAME [rssi lqi psdu..]
  */
 #define FW_VER_HI 0
-#define FW_VER_LO 6
+#define FW_VER_LO 7
 
 /* ---- SFRs ---- */
 __sfr __at (0xF1) PERCFG;
@@ -137,10 +137,26 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 /* ~320 us (one aUnitBackoffPeriod, 20 symbols) of busy-wait at 32 MHz. */
 #define CSMA_BACKOFF_LOOPS 2000U
 
+/* MAC-level acknowledgement + retransmit - the other half of the official MAC's
+   reliability that our firmware was missing. When a transmitted frame requests an
+   ACK (FCF.AR), wait for the matching ACK (same DSN, CRC-valid) and, if it does
+   not arrive, retransmit the whole frame (re-running CSMA-CA) up to
+   MAC_MAX_FRAME_RETRIES times - exactly what TI's MAC does for unicast. A frame
+   that arrives during the ACK wait but is NOT our ACK is forwarded to the host, so
+   no inbound traffic is dropped while we wait. Only ack-requested frames are
+   affected; broadcasts and ack-not-requested frames keep the old behavior. */
+#define FCF_ACK_REQUEST   0x20   /* FCF byte0 bit5: acknowledgement request */
+#define FCF_TYPE_MASK     0x07   /* FCF byte0 frame-type field */
+#define FCF_TYPE_ACK      0x02   /* ...== ACK */
+#define RXSTAT_CRC_OK     0x80   /* trailing status byte bit7: CRC passed */
+#define MAC_MAX_FRAME_RETRIES 3  /* macMaxFrameRetries (4 transmissions total) */
+#define ACK_WAIT_LOOPS    6000U  /* > ~1 ms: covers aTurnaround + ACK reception */
+
 static __xdata unsigned char rxbuf[140];
 static unsigned char mac_flags = 0;
 static unsigned char tx_retries = 0;
 static unsigned int rng_state = 0xACE1u;   /* CSMA backoff PRNG (software, no radio reads) */
+static unsigned char wait_for_ack(unsigned char dsn);  /* defined after radio_rx */
 
 static void clock_init(void){
   CLKCONCMD = 0x80;                 /* 32 MHz XOSC, 32 kHz RC */
@@ -234,14 +250,24 @@ static unsigned char radio_tx(__xdata unsigned char* psdu, unsigned char len,
      sequence that the scan/join path is known to work with - an earlier rewrite
      that re-implemented the TX inline regressed end-device scanning (tx=0). */
   if(mac_flags & MAC_FLAG_CCA_TX){
-    for(i=0; i<=CSMA_MAX_BACKOFFS; i++){
-      r=radio_tx_once(psdu,len);
-      *attempts=(unsigned char)(i+1);
-      if(r==0) return 0;
-      backoff_delay((unsigned char)(rng_byte() & (unsigned char)((1u<<be)-1u)));
-      if(be<CSMA_MAX_BE) be++;
+    unsigned char fr, want_ack=(unsigned char)(psdu[0] & FCF_ACK_REQUEST), total=0;
+    /* macMaxFrameRetries: each pass runs the full CSMA-CA, transmits, then (if the
+       frame requested an ACK) waits for it; on no-ACK the whole frame is retried. */
+    for(fr=0; fr<=MAC_MAX_FRAME_RETRIES; fr++){
+      be=CSMA_MIN_BE;
+      for(i=0; i<=CSMA_MAX_BACKOFFS; i++){
+        r=radio_tx_once(psdu,len);
+        if(++total==0) total=255;
+        if(r==0) break;            /* got the channel + TXDONE */
+        backoff_delay((unsigned char)(rng_byte() & (unsigned char)((1u<<be)-1u)));
+        if(be<CSMA_MAX_BE) be++;
+      }
+      if(r!=0){ *attempts=total; return r; }   /* channel-access failure */
+      if(!want_ack){ *attempts=total; return 0; }       /* no ACK expected */
+      if(wait_for_ack(psdu[2])){ *attempts=total; return 0; }  /* acked */
+      /* no ACK -> retransmit the whole frame (outer loop) */
     }
-    return r;
+    *attempts=total; return 1;     /* no ACK after macMaxFrameRetries */
   }
   max_attempts=(unsigned char)(retries+1);
   for(i=0;i<max_attempts;i++){
@@ -282,6 +308,33 @@ static void send_frame(unsigned char resp, __xdata unsigned char* d, unsigned ch
   utx(fcs);
 }
 
+/* forward a frame already read into rxbuf[] (length rlen, incl 2 status bytes) to
+   the host as RSP_RX_FRAME: [rssi][crc|lqi][psdu...]. */
+static void forward_rx(unsigned char rlen){
+  unsigned char i, fcs=(unsigned char)((rlen+1)^RSP_RX_FRAME);
+  utx(0xFE); utx((unsigned char)(rlen+1)); utx(RSP_RX_FRAME);
+  utx(rxbuf[rlen-2]); fcs^=rxbuf[rlen-2];       /* RSSI */
+  utx(rxbuf[rlen-1]); fcs^=rxbuf[rlen-1];       /* CRC|LQI */
+  for(i=0;i+2<rlen;i++){ utx(rxbuf[i]); fcs^=rxbuf[i]; }
+  utx(fcs);
+}
+
+/* After an ack-requested TX, poll RX for the matching ACK (frame-type ACK, CRC OK,
+   DSN == dsn). Any other frame received in the window is real inbound traffic, so
+   forward it to the host rather than dropping it. Returns 1 if acked, 0 on timeout. */
+static unsigned char wait_for_ack(unsigned char dsn){
+  unsigned int t; unsigned char rlen;
+  for(t=0;t<ACK_WAIT_LOOPS;t++){
+    rlen = radio_rx();
+    if(rlen>=2){
+      if(rlen>=5 && (rxbuf[0] & FCF_TYPE_MASK)==FCF_TYPE_ACK &&
+         (rxbuf[rlen-1] & RXSTAT_CRC_OK) && rxbuf[2]==dsn) return 1;
+      forward_rx(rlen);             /* not our ACK: don't lose inbound data */
+    }
+  }
+  return 0;
+}
+
 void main(void){
   __xdata unsigned char cmd[140];
   unsigned char st=0, ln=0, idx=0, c, rlen;
@@ -298,16 +351,7 @@ void main(void){
   for(;;){
     /* radio RX -> host */
     rlen = radio_rx();
-    if(rlen >= 2){
-      /* report: 0x84 [rssi][crc|lqi][psdu...]  (psdu = rxbuf[0..rlen-3]) */
-      utx(0xFE); utx((unsigned char)(rlen+1)); utx(RSP_RX_FRAME);
-      { unsigned char i, fcs=(unsigned char)((rlen+1)^RSP_RX_FRAME);
-        utx(rxbuf[rlen-2]); fcs^=rxbuf[rlen-2];     /* RSSI */
-        utx(rxbuf[rlen-1]); fcs^=rxbuf[rlen-1];     /* CRC|LQI */
-        for(i=0;i+2<rlen;i++){ utx(rxbuf[i]); fcs^=rxbuf[i]; }
-        utx(fcs);
-      }
-    }
+    if(rlen >= 2){ forward_rx(rlen); }   /* 0x84 [rssi][crc|lqi][psdu...] */
     /* UART command parser (non-blocking, one byte per loop) */
     if(urx_avail()){
       c=urx();
