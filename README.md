@@ -13,7 +13,7 @@
 ![Zigbee](https://img.shields.io/badge/Zigbee-3.0%20%7C%20PRO-e85d04)
 ![Backends](https://img.shields.io/badge/backends-SDCC%20%2B%20Z--Stack%20ZNP-6f42c1)
 ![License](https://img.shields.io/badge/license-Apache--2.0-3fb950)
-![Release](https://img.shields.io/badge/release-v0.15.0-2ea043)
+![Release](https://img.shields.io/badge/release-v0.16.0-2ea043)
 
 The companion to the [ArduinoNRF](https://github.com/dunknowcoding/ArduinoNRF)
 board package, kept as a **separate library** so the board package stays small.
@@ -32,6 +32,9 @@ board package, kept as a **separate library** so the board package stays small.
   Z-Stack MAC uses (verified recovering frames under congestion on the bench).
 - 🛠️ **Hardware-proven** — bring-up across up to 5 boards: a 3-hop line, a
   self-healing 2×2 mesh, Green Power, and source-routed delivery.
+- 🔑 **Own crypto, R23-ready** — all cryptography is in-tree (no external library),
+  including an RFC-7748-verified **X25519** and a **SPEKE Dynamic Link Key**, the
+  Zigbee PRO 2023 key-establishment that retires the well-known link key.
 
 ## What it does
 

@@ -646,10 +646,26 @@ remain before a 1.0 stable release:
   and a ZNP node, to put numbers on the reliability gain. The mechanisms are in
   place and verified functional; the `mac[retx noack]` counters (v0.8) are the
   instrument this benchmark reads.
-- **Track 2 — Zigbee PRO 2023 (R23) features the 2.4 GHz hardware supports.**
-  Device Interview and Trust Center Swap-Out (host-side protocol), and — pending a
-  crypto-ownership decision between NiusZigbee and the NiusCrypto/CC310 library —
-  Dynamic Link Key (SPEKE/Curve25519). Sub-GHz is out (CC2530 is 2.4 GHz only) and
-  Zigbee Direct waits on a mature NimBLE controller.
+- **Track 2 — Zigbee PRO 2023 (R23) features the 2.4 GHz hardware supports** (below).
 
 Detailed on-air evidence lives in [VERIFIED_BEHAVIOR.md](VERIFIED_BEHAVIOR.md).
+
+## Zigbee PRO 2023 (R23)
+
+NiusZigbee implements its **own** cryptography for R23 - no external crypto library.
+
+- **Dynamic Link Key (DLK) — done.** R23 replaces the well-known `ZigBeeAlliance09`
+  link key with a password-authenticated key exchange. NiusZigbee implements
+  **SPEKE over Curve25519**: `ZigbeeCurve25519` (X25519, RFC 7748 - field arithmetic
+  mod 2^255-19 + Montgomery ladder) and `ZigbeeSpeke` (password->generator mapping,
+  ephemeral ECDH, AES-MMO KDF + key confirmation), all in-tree on the nRF host.
+  Verified on hardware: `CC2530_Curve25519` 6/6 against the RFC 7748 test vectors;
+  `CC2530_Speke` 3/3 (mutual agreement, key confirmation, wrong-password rejection).
+  *Byte-exact interop with a certified R23 device additionally needs the spec's
+  generator/KDF/transcript constants.*
+- **Device Interview, Trust Center Swap-Out — pending** (host-side protocol on top
+  of the existing key-transport machinery).
+- **Zigbee Direct (BLE) — parked** on a mature NimBLE controller in the board
+  package (currently an early slice).
+- **Sub-GHz — out of scope:** the CC2530 is a 2.4 GHz-only transceiver. A 2.4 GHz
+  R23 device is still conformant.

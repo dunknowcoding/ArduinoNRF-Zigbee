@@ -212,6 +212,23 @@ the jammed channel (~-23 dBm peak), ambient 2.4 GHz Wi-Fi on the low channels
 (~-27 to -36 dBm), and quiet channels (~-78 dBm noise floor) - the channel-energy
 sensing the official MAC uses for quietest-channel formation and frequency agility.
 
+### R23 Dynamic Link Key crypto (own implementation)
+
+NiusZigbee implements its own cryptography for the Zigbee PRO 2023 (R23) Dynamic
+Link Key; no external crypto library.
+
+- **X25519** (`ZigbeeCurve25519`, Curve25519 ECDH): `CC2530_Curve25519` is **6/6**
+  against the RFC 7748 known-answer vectors - both section 5.2 scalar-multiplication
+  vectors and the section 6.1 Diffie-Hellman exchange (Alice/Bob public keys + the
+  shared secret derived from both directions).
+- **SPEKE DLK** (`ZigbeeSpeke`, SPEKE over Curve25519 + AES-MMO KDF/confirmation):
+  `CC2530_Speke` is **3/3** - two parties sharing the same install code derive the
+  same 128-bit link key (mutual agreement), the key-confirmation tags verify, and a
+  wrong password yields no agreement (so a Trust Center rejects a wrong-code joiner).
+  This is the property that retires the well-known `ZigBeeAlliance09` key. Pure host
+  computation. Byte-exact interop with a certified R23 device additionally requires
+  the spec's generator/KDF/transcript constants.
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`
