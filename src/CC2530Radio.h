@@ -101,6 +101,7 @@ using nzb::GP_COMM_LIGHTWEIGHT_UNICAST;
 using nzb::ZigbeeGpProxy;
 using nzb::GpProxyEntry;
 using nzb::CC2530MacInfo;
+using nzb::CC2530MacStats;
 using nzb::CC2530RxCallback;
 using nzb::CC2530DataCallback;
 using nzb::CC2530MacCommandCallback;

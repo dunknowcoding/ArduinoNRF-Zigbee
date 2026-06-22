@@ -1645,6 +1645,18 @@ void loop() {
       Serial.print(" drop="); Serial.print(a.dropped);
       Serial.print("]");
     }
+    {
+      // CC2530 firmware v0.8+ MAC reliability counters: retx = unicasts the MAC
+      // recovered by retransmitting after a missed ACK, noack = unicasts it gave
+      // up on. Makes the per-hop MAC-ACK path observable. (Silently skipped on
+      // older firmware that does not answer CMD_GET_STATS.)
+      CC2530MacStats ms;
+      if (radio.getMacStats(ms)) {
+        Serial.print(" mac[retx="); Serial.print(ms.retransmits);
+        Serial.print(" noack="); Serial.print(ms.noAck);
+        Serial.print("]");
+      }
+    }
     Serial.println();
   }
 

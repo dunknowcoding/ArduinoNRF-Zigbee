@@ -28,7 +28,7 @@
  *     0x84 RX_FRAME [rssi lqi psdu..]
  */
 #define FW_VER_HI 0
-#define FW_VER_LO 7
+#define FW_VER_LO 8
 
 /* ---- SFRs ---- */
 __sfr __at (0xF1) PERCFG;
@@ -91,6 +91,7 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 #define CMD_TX_ADV        0x08
 #define CMD_SET_TX_POWER  0x09
 #define CMD_SET_PENDING   0x0A
+#define CMD_GET_STATS     0x0B
 
 #define RSP_RESET_IND     0x80
 #define RSP_PONG          0x81
@@ -98,6 +99,7 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 #define RSP_TXSTAT        0x83
 #define RSP_RX_FRAME      0x84
 #define RSP_MAC_INFO      0x85
+#define RSP_STATS         0x86
 
 #define MAC_FLAG_FILTER   0x01
 #define MAC_FLAG_AUTOACK  0x02
@@ -156,6 +158,11 @@ static __xdata unsigned char rxbuf[140];
 static unsigned char mac_flags = 0;
 static unsigned char tx_retries = 0;
 static unsigned int rng_state = 0xACE1u;   /* CSMA backoff PRNG (software, no radio reads) */
+/* MAC reliability counters (read via CMD_GET_STATS) - make the v0.7 retransmit
+   path observable: mac_retx = unicasts delivered only after >=1 MAC retransmit,
+   mac_noack = unicasts that exhausted macMaxFrameRetries with no ACK. */
+static unsigned int mac_retx = 0;
+static unsigned int mac_noack = 0;
 static unsigned char wait_for_ack(unsigned char dsn);  /* defined after radio_rx */
 
 static void clock_init(void){
@@ -264,10 +271,14 @@ static unsigned char radio_tx(__xdata unsigned char* psdu, unsigned char len,
       }
       if(r!=0){ *attempts=total; return r; }   /* channel-access failure */
       if(!want_ack){ *attempts=total; return 0; }       /* no ACK expected */
-      if(wait_for_ack(psdu[2])){ *attempts=total; return 0; }  /* acked */
+      if(wait_for_ack(psdu[2])){
+        if(fr>0) mac_retx++;       /* delivered only after >=1 retransmit */
+        *attempts=total; return 0;
+      }
       /* no ACK -> retransmit the whole frame (outer loop) */
     }
-    *attempts=total; return 1;     /* no ACK after macMaxFrameRetries */
+    mac_noack++;                   /* exhausted macMaxFrameRetries, never acked */
+    *attempts=total; return 1;
   }
   max_attempts=(unsigned char)(retries+1);
   for(i=0;i<max_attempts;i++){
@@ -408,6 +419,13 @@ void main(void){
                 if(cmd[1]) FRMCTRL1 |= FRMCTRL1_PENDING_OR;
                 else FRMCTRL1 &= (unsigned char)~FRMCTRL1_PENDING_OR;
                 send_frame(RSP_OK,tmp,0);
+              }
+              else if(cc==CMD_GET_STATS){
+                tmp[0]=(unsigned char)(mac_retx & 0xFF);
+                tmp[1]=(unsigned char)(mac_retx >> 8);
+                tmp[2]=(unsigned char)(mac_noack & 0xFF);
+                tmp[3]=(unsigned char)(mac_noack >> 8);
+                send_frame(RSP_STATS,tmp,4);
               }
             }
             st=0;

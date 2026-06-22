@@ -75,6 +75,12 @@ struct CC2530MacInfo {
   uint8_t ieeeAddress[8];
 };
 
+// MAC reliability counters reported by firmware >= v0.8 (CMD_GET_STATS).
+struct CC2530MacStats {
+  uint16_t retransmits;  // unicasts delivered only after >=1 MAC retransmit
+  uint16_t noAck;        // unicasts that exhausted macMaxFrameRetries (never acked)
+};
+
 class CC2530Radio {
  public:
   /** Largest 802.15.4 payload we accept (127-byte PHY frame minus 2-byte FCS). */
@@ -117,6 +123,12 @@ class CC2530Radio {
 
   /** Read back the low-level MAC assist configuration from the CC2530. */
   bool getMacInfo(CC2530MacInfo& info);
+
+  /** Read the MAC reliability counters (CC2530 firmware v0.8+): how many unicasts
+      the firmware's MAC-ACK path recovered by retransmitting, and how many it gave
+      up on after macMaxFrameRetries. Lets a host observe per-hop MAC reliability.
+      @return true on OK (false on older firmware that lacks CMD_GET_STATS). */
+  bool getMacStats(CC2530MacStats& stats);
 
   /** Set the raw CC2530 TXPOWER register value. */
   bool setTxPowerRaw(uint8_t txpower);

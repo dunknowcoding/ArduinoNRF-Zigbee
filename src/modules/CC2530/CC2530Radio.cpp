@@ -17,6 +17,7 @@ const uint8_t CMD_GET_MAC = 0x07;
 const uint8_t CMD_TX_ADV = 0x08;
 const uint8_t CMD_SET_TX_POWER = 0x09;
 const uint8_t CMD_SET_PENDING = 0x0A;
+const uint8_t CMD_GET_STATS = 0x0B;
 // module -> host
 const uint8_t RSP_RESET_IND = 0x80;
 const uint8_t RSP_PONG = 0x81;
@@ -24,6 +25,7 @@ const uint8_t RSP_OK = 0x82;
 const uint8_t RSP_TXSTAT = 0x83;
 const uint8_t RSP_RX_FRAME = 0x84;
 const uint8_t RSP_MAC_INFO = 0x85;
+const uint8_t RSP_STATS = 0x86;
 // The CC2530 appends RSSI with this offset (datasheet): dBm = raw - 73.
 const int16_t RSSI_OFFSET = 73;
 }  // namespace
@@ -299,6 +301,14 @@ bool CC2530Radio::setFramePending(bool pending) {
   uint8_t v = pending ? 1 : 0;
   sendFrame(CMD_SET_PENDING, &v, 1);
   return waitResp(RSP_OK, 300);
+}
+
+bool CC2530Radio::getMacStats(CC2530MacStats& stats) {
+  sendFrame(CMD_GET_STATS, nullptr, 0);
+  if (!waitResp(RSP_STATS, 300) || respLen_ < 4) return false;
+  stats.retransmits = (uint16_t)respData_[0] | ((uint16_t)respData_[1] << 8);
+  stats.noAck = (uint16_t)respData_[2] | ((uint16_t)respData_[3] << 8);
+  return true;
 }
 
 bool CC2530Radio::send(const uint8_t* payload, uint8_t len) {

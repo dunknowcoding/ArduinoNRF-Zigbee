@@ -602,3 +602,42 @@ while preserving the existing raw send / receive / sniffer APIs.
     no-network abort, and a finding & binding failure path. This ties the
     individual commissioning pieces (M5 finding & binding, M7 touchlink,
     formation/steering) into one procedure with one result.
+
+## Toward 1.0 — CC2530 firmware MAC reliability (v0.6–v0.8)
+
+With the full Zigbee 3.0 / Zigbee PRO surface complete (items 1–17), a second
+**TI Z-Stack ZNP** backend bring-up'd on real hardware, and the host/USB stack
+(TaichiUSB) hardened, the work toward a 1.0 stable release brings the SDCC CC2530
+transceiver firmware up to the channel-access and per-hop reliability of the
+official MAC:
+
+- **v0.6 — unslotted CSMA-CA.** On a busy channel the transmitter waits a random
+  exponential backoff (BE 3..5, up to `macMaxCSMABackoffs`) and retries with a
+  widening window instead of v0.5's immediate retry-on-busy. Built on the proven
+  hardware `STXONCCA` path plus a software xorshift PRNG seeded per node from the
+  IEEE (no radio-register reads in the TX path). On-air verified: a v0.6 router
+  scans, transmits, receives, and joins a coordinator.
+- **v0.7 — MAC-level ACK + retransmit.** An ack-requested unicast now waits for the
+  matching ACK (frame type, CRC, DSN) and retransmits the whole frame, re-running
+  CSMA-CA, up to `macMaxFrameRetries`; a non-ACK frame received during the wait is
+  forwarded to the host so no inbound traffic is dropped. On-air verified through
+  the association handshake (itself an ack-requested unicast).
+- **v0.8 — MAC reliability counters.** `CMD_GET_STATS` exposes `mac_retx` /
+  `mac_noack`, surfaced as `mac[retx noack]` in the example status line, so per-hop
+  delivery is directly observable. Verified readable on air.
+
+The firmware now carries both halves of TI's MAC reliability story. Two tracks
+remain before a 1.0 stable release:
+
+- **Track 1 — beat-ZNP quantitative proof (active).** A forced-loss retransmit
+  measurement and a multi-hop-with-data congestion/delivery comparison against v0.5
+  and a ZNP node, to put numbers on the reliability gain. The mechanisms are in
+  place and verified functional; the `mac[retx noack]` counters (v0.8) are the
+  instrument this benchmark reads.
+- **Track 2 — Zigbee PRO 2023 (R23) features the 2.4 GHz hardware supports.**
+  Device Interview and Trust Center Swap-Out (host-side protocol), and — pending a
+  crypto-ownership decision between NiusZigbee and the NiusCrypto/CC310 library —
+  Dynamic Link Key (SPEKE/Curve25519). Sub-GHz is out (CC2530 is 2.4 GHz only) and
+  Zigbee Direct waits on a mature NimBLE controller.
+
+Detailed on-air evidence lives in [VERIFIED_BEHAVIOR.md](VERIFIED_BEHAVIOR.md).

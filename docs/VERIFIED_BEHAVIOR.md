@@ -168,6 +168,20 @@ frame losses occurred in this run to trigger it. A forced-loss retransmit
 measurement and a multi-hop congestion comparison vs v0.5/ZNP remain as
 quantitative follow-ups.
 
+### CC2530 firmware v0.8: MAC reliability counters (observability)
+
+Firmware v0.8 adds `CMD_GET_STATS` exposing two counters - `mac_retx` (unicasts
+delivered only after one or more MAC retransmits) and `mac_noack` (unicasts that
+exhausted `macMaxFrameRetries`) - surfaced by the host as `mac[retx=.. noack=..]`
+in the `CC2530_BeaconJoin` status line (`CC2530Radio::getMacStats`). This turns the
+v0.7 retransmit path from build-verified into directly observable. Verified on-air
+that the counters are readable: a v0.8 router reports `mac[retx=0 noack=0]` while a
+v0.5 coordinator (no `CMD_GET_STATS`) correctly omits the field. On this clean
+2-node link the counters are **0** - no frames were lost, so nothing triggered a
+retransmit; the counters reading nonzero requires a lossy/congested path, which is
+exactly the forced-loss / multi-hop-with-data scenario still outstanding. The
+counters are the instrument that test will read.
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`

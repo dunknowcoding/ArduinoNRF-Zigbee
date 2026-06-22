@@ -1,11 +1,36 @@
-# NiusZigbee
+# ⚡ NiusZigbee
 
-Host-side drivers that let an **ArduinoNRF (nRF52840)** board drive an external
-**Zigbee / IEEE 802.15.4 radio** (the cheap AliExpress **CC2530** module) over a
-UART — and, on top of that radio, a **complete host-side Zigbee 3.0 / Zigbee PRO
-stack** implemented natively on the nRF52840. The companion to the
-[ArduinoNRF](https://github.com/dunknowcoding/ArduinoNRF) board package, kept as
-a **separate library** so the board package stays small.
+> **A complete Zigbee 3.0 / Zigbee PRO stack on two cheap chips.**
+> An **ArduinoNRF (nRF52840)** drives an AliExpress **CC2530** radio over UART — and
+> runs the entire Zigbee stack itself: scan & join, self-healing mesh routing,
+> AES-CCM* NWK/APS security, commissioning, Green Power, and a dozen ZCL clusters.
+> **No TI Z-Stack, no gateway, no cloud.** Flash the radio once, then it's just an
+> Arduino sketch.
+
+![Arduino Library](https://img.shields.io/badge/Arduino-library-00979D?logo=arduino&logoColor=white)
+![MCU](https://img.shields.io/badge/MCU-nRF52840-0a7bbb)
+![Radio](https://img.shields.io/badge/radio-CC2530-f59e0b)
+![Zigbee](https://img.shields.io/badge/Zigbee-3.0%20%7C%20PRO-e85d04)
+![Backends](https://img.shields.io/badge/backends-SDCC%20%2B%20Z--Stack%20ZNP-6f42c1)
+![License](https://img.shields.io/badge/license-Apache--2.0-3fb950)
+![Release](https://img.shields.io/badge/release-v0.13.0-2ea043)
+
+The companion to the [ArduinoNRF](https://github.com/dunknowcoding/ArduinoNRF)
+board package, kept as a **separate library** so the board package stays small.
+
+## Why it's different
+
+- 🧠 **The whole stack runs on the host MCU** — the $1 CC2530 is just a PHY/MAC
+  radio; NWK, APS, ZCL, ZDO, security and routing all live on the nRF52840.
+- 🔓 **No vendor stack required** — a clean-room SDCC transceiver firmware, flashed
+  once over the debug port by the board package's built-in `CCDebugger`.
+- 🔁 **Two backends, one API** — run the native host stack, or drive a CC2530
+  running **TI Z-Stack ZNP** as a certified coprocessor.
+- 📡 **TI-grade MAC reliability** — IEEE 802.15.4 unslotted **CSMA-CA** and
+  **MAC-level ACK + retransmit** in the radio firmware, the same channel-access and
+  per-hop reliability the official Z-Stack MAC uses.
+- 🛠️ **Hardware-proven** — bring-up across up to 5 boards: a 3-hop line, a
+  self-healing 2×2 mesh, Green Power, and source-routed delivery.
 
 ## What it does
 
@@ -175,9 +200,8 @@ Layered on the MAC base; each piece ships with a hardware self-test example.
 - **ZCL device clusters.** Basic, Identify, Groups, Scenes, On/Off, Level
   Control, Color Control, Thermostat, Window Covering, Door Lock, IAS Zone,
   Occupancy Sensing, Temperature / Relative-Humidity / Electrical Measurement,
-  OTA Upgrade, attribute reporting, and a `ZigbeeLight` device abstraction. The
-  `CC2530_DeviceClusters` self-test exercises the lock + sensor clusters
-  (26/26 on board1).
+  OTA Upgrade, attribute reporting, and a `ZigbeeLight` device abstraction, each
+  exercised by a hardware self-test example.
 
 ## Current stack boundary
 
@@ -193,17 +217,20 @@ It is **not** certified Zigbee PRO (that needs the official test harness), but t
 technical surface is complete. Source-routed frames are NWK-secured on air — the
 mutable relay-index byte is excluded from the CCM* AAD, so a relay can advance it
 and re-secure under its own aux header without breaking the MIC
-(`radio.sendNwkDataSourceRouted()`; verified 14/14 by `CC2530_SourceRouteSecurity`
-on board1). Sleepy-child support is done end to end: the host queues indirect
-traffic and the CC2530 **v0.5** firmware sets the auto-ACK frame-pending bit
-(`FRMCTRL1.PENDING_OR`, via `radio.setFramePending()`) so a polling child learns
-when data is waiting. The CC2530 firmware now matches TI's MAC channel-access and
-reliability: **v0.6** adds IEEE 802.15.4 unslotted **CSMA-CA** (random exponential
-backoff before TX), and **v0.7** adds **MAC-level ACK + retransmit** (wait for the
-ACK, retransmit up to `macMaxFrameRetries` if it is missing). A **second backend** now lives beside the raw driver —
-`CC2530ZnpRadio` drives a CC2530 running TI Z-Stack ZNP over the MT API (on-air
-bring-up gated on an IAR build of the ZNP image). Milestone status:
-[docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md).
+(`radio.sendNwkDataSourceRouted()`). Sleepy-child support is done end to end: the
+host queues indirect traffic and the CC2530 firmware sets the auto-ACK
+frame-pending bit (`FRMCTRL1.PENDING_OR`, via `radio.setFramePending()`) so a
+polling child learns when data is waiting.
+
+The CC2530 transceiver firmware now carries the same channel-access and per-hop
+reliability the official Z-Stack MAC uses: IEEE 802.15.4 unslotted **CSMA-CA**
+(random exponential backoff before TX), **MAC-level ACK + retransmit** (wait for
+the ACK, retransmit up to `macMaxFrameRetries`), and live **MAC reliability
+counters** (`mac[retx noack]`) so per-hop delivery is observable on the bench. A
+**second backend** lives beside the raw driver — `CC2530ZnpRadio` drives a CC2530
+running TI Z-Stack ZNP over the MT API. Milestone status and on-air evidence:
+[docs/STACK_ROADMAP.md](docs/STACK_ROADMAP.md) ·
+[docs/VERIFIED_BEHAVIOR.md](docs/VERIFIED_BEHAVIOR.md).
 
 ## Extending to new modules
 

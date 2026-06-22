@@ -54,6 +54,15 @@ while waiting. Only ack-requested frames are affected; broadcasts and
 ack-not-requested frames keep the previous behavior. On-air verified: a v0.7 node
 joins and exchanges traffic cleanly (`mic=0 rpl=0`).
 
+Firmware v0.8 adds `GET_STATS` (0x0B): two MAC reliability counters, `mac_retx`
+(unicasts delivered only after one or more MAC retransmits) and `mac_noack`
+(unicasts that exhausted `macMaxFrameRetries` without an ACK). They make the v0.7
+retransmit path observable from the host (`CC2530Radio::getMacStats`,
+`mac[retx=.. noack=..]` in the `CC2530_BeaconJoin` status line) - `retx > 0` is
+direct evidence that the MAC recovered a frame the channel dropped, which is the
+reliability ZNP provides and our pre-v0.7 firmware did not. Pure instrumentation;
+no change to the TX/RX behavior.
+
 ## UART protocol
 
 ```
@@ -70,6 +79,8 @@ Host -> CC2530:  FE  LEN  CMD  [DATA..]  FCS        (FCS = XOR of LEN..DATA)
   0x07 GET_MAC                 -> 0x85 MAC_INFO [flags retries pan short ieee]
   0x08 TX_ADV [retries psdu..] -> 0x83 TXSTAT [status attempts]
   0x09 SET_TX_POWER [raw]      -> 0x82 OK
+  0x0A SET_PENDING [0|1]       -> 0x82 OK   (force frame-pending in auto-ACKs)
+  0x0B GET_STATS               -> 0x86 STATS [retx_lo retx_hi noack_lo noack_hi]
 
 CC2530 -> Host (asynchronous):
   0x80 RESET_IND [ver_hi ver_lo]      (sent once at boot)
