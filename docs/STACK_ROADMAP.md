@@ -638,15 +638,17 @@ official MAC:
   reliability against latency or adapt the backoff window to congestion
   (`macMaxFrameRetries=0` disables retransmit at runtime). Build-verified.
 
-The firmware now carries both halves of TI's MAC reliability story. Two tracks
-remain before a 1.0 stable release:
+The firmware now carries both halves of TI's MAC reliability story.
 
-- **Track 1 — beat-ZNP quantitative proof (active).** A forced-loss retransmit
-  measurement and a multi-hop-with-data congestion/delivery comparison against v0.5
-  and a ZNP node, to put numbers on the reliability gain. The mechanisms are in
-  place and verified functional; the `mac[retx noack]` counters (v0.8) are the
-  instrument this benchmark reads.
-- **Track 2 — Zigbee PRO 2023 (R23) features the 2.4 GHz hardware supports** (below).
+## 1.0.0 — first stable release
+
+NiusZigbee **1.0.0** is the first stable release: the full Zigbee 3.0 / Zigbee PRO
+surface, a second TI Z-Stack ZNP backend, ZNP-grade MAC reliability (CSMA-CA,
+MAC-ACK + retransmit verified recovering frames under congestion, energy-detect
+scan, tunable MAC PIB), and R23 Dynamic Link Key on NiusZigbee's own elliptic-curve
+crypto (X25519 + SPEKE) - all hardware-verified. Remaining work (each gated on a
+verification rig or the R23 spec constants, to be released only once verified) is in
+[POST_1.0_PLAN.md](POST_1.0_PLAN.md).
 
 Detailed on-air evidence lives in [VERIFIED_BEHAVIOR.md](VERIFIED_BEHAVIOR.md).
 

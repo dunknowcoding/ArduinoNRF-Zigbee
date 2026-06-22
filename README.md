@@ -13,7 +13,7 @@
 ![Zigbee](https://img.shields.io/badge/Zigbee-3.0%20%7C%20PRO-e85d04)
 ![Backends](https://img.shields.io/badge/backends-SDCC%20%2B%20Z--Stack%20ZNP-6f42c1)
 ![License](https://img.shields.io/badge/license-Apache--2.0-3fb950)
-![Release](https://img.shields.io/badge/release-v0.16.0-2ea043)
+![Release](https://img.shields.io/badge/release-v1.0.0-2ea043)
 
 The companion to the [ArduinoNRF](https://github.com/dunknowcoding/ArduinoNRF)
 board package, kept as a **separate library** so the board package stays small.
