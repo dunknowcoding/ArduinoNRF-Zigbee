@@ -45,6 +45,7 @@
 #include "ZigbeeWindowCoveringCluster.h"
 #include "ZigbeeLight.h"
 #include "ZigbeeAes128Decrypt.h"
+#include "ZigbeeCurve25519.h"
 #include "ZigbeeTouchlink.h"
 #include "ZigbeeGreenPower.h"
 #include "ZigbeeGreenPowerCluster.h"
@@ -71,6 +72,7 @@ using nzb::BDB_STATUS_NO_NETWORK;
 using nzb::BDB_STATUS_NO_IDENTIFY_QUERY_RESPONSE;
 using nzb::BDB_DONE;
 using nzb::ZigbeeAes128Decrypt;
+using nzb::ZigbeeCurve25519;
 using nzb::ZigbeeTouchlink;
 using nzb::ZllScanResponse;
 using nzb::ZllNetworkJoinRequest;
