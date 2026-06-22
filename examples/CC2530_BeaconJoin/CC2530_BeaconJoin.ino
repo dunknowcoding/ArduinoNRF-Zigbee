@@ -132,7 +132,10 @@ static const uint8_t FRAG_BLOCK_SIZE = 40;   // per-fragment block size -> 3 blo
 
 static const uint16_t PAN_ID = NIUS_ZIGBEE_PAN_ID;
 static const uint64_t EXT_PAN_ID = 0x1A62195E00000000ULL;
-static const uint8_t COORD_CHANNEL = 15;
+#ifndef NIUS_ZIGBEE_CHANNEL
+#define NIUS_ZIGBEE_CHANNEL 15
+#endif
+static const uint8_t COORD_CHANNEL = NIUS_ZIGBEE_CHANNEL;
 static const uint16_t THIS_NODE = NIUS_ZIGBEE_THIS_NODE;
 static const bool IS_COORDINATOR = ROLE_COORD;
 static const bool IS_PARENT_CAPABLE = ROLE_COORD || ROLE_ROUTER;
@@ -214,10 +217,12 @@ static const uint8_t LINE_PARENT_DEPTH = NIUS_ZIGBEE_MESH_TOPO ? 1 : 2;  // D <-
 #endif
 #endif
 
-#if NIUS_ZIGBEE_SECURE_JOIN
+#if NIUS_ZIGBEE_SECURE_JOIN || defined(NIUS_ZIGBEE_FIXED_CHANNEL)
 // Secure-join demo is 1-hop (joiner <-> Trust Center): scan only the
 // coordinator's channel so the joiner associates with the TC directly rather
-// than a router that cannot deliver the network key.
+// than a router that cannot deliver the network key. NIUS_ZIGBEE_FIXED_CHANNEL
+// forces the same single-channel scan (used to isolate a bench measurement on
+// one channel away from other co-located networks).
 static const uint8_t SCAN_CHANNELS[] = {COORD_CHANNEL};
 #else
 static const uint8_t SCAN_CHANNELS[] = {11, 15, 20, 25};
@@ -267,6 +272,9 @@ ApsDupeEntry apsDupeStorage[6];
 uint32_t apsDuplicates = 0;
 static const uint8_t APS_ENDPOINT = 1;
 static const uint16_t APS_CLUSTER = 0x1042;   // a private test cluster
+#ifndef NIUS_ZIGBEE_APS_PERIOD_MS
+#define NIUS_ZIGBEE_APS_PERIOD_MS 10000   // end-device acked APS send interval
+#endif
 static const uint16_t APS_PROFILE = 0x0104;   // Home Automation
 uint8_t apsCounter = 0;
 uint32_t apsSeq = 0, nextApsSendAt = 0;
@@ -412,6 +420,12 @@ void onMacCommand(const MacCommandFrame& frame, int8_t rssi, uint8_t lqi) {
   (void)rssi;
 
   if (frame.commandId == MAC_CMD_BEACON_REQUEST) {
+#ifdef NIUS_ZIGBEE_DBG_BEACON
+    Serial.print("RX beacon-req; parent="); Serial.print(IS_PARENT_CAPABLE);
+    Serial.print(" joined="); Serial.print(network.isJoined());
+    Serial.print(" permit="); Serial.print(network.isJoiningPermitted());
+    Serial.println(IS_PARENT_CAPABLE && network.isJoined() && network.isJoiningPermitted() ? " -> BEACON" : " -> ignore");
+#endif
     if (IS_PARENT_CAPABLE && network.isJoined() && network.isJoiningPermitted()) {
       sendOurBeacon();
     }
@@ -1088,7 +1102,7 @@ void serviceRouteDiscovery() {
   // Route is ACTIVE: send a new acked APS frame every 10 s and service any
   // retransmits that have come due in between.
   if ((int32_t)(millis() - nextApsSendAt) >= 0) {
-    nextApsSendAt = millis() + 10000;
+    nextApsSendAt = millis() + NIUS_ZIGBEE_APS_PERIOD_MS;
 #if NIUS_ZIGBEE_FRAGTEST
     // Phase 2: send a long ASDU as APS fragments over the routed path. Each block
     // is one frame; the coordinator reassembles by APS counter in onApsData.

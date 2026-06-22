@@ -18,6 +18,7 @@ const uint8_t CMD_TX_ADV = 0x08;
 const uint8_t CMD_SET_TX_POWER = 0x09;
 const uint8_t CMD_SET_PENDING = 0x0A;
 const uint8_t CMD_GET_STATS = 0x0B;
+const uint8_t CMD_ED_SCAN = 0x0C;
 // module -> host
 const uint8_t RSP_RESET_IND = 0x80;
 const uint8_t RSP_PONG = 0x81;
@@ -26,6 +27,7 @@ const uint8_t RSP_TXSTAT = 0x83;
 const uint8_t RSP_RX_FRAME = 0x84;
 const uint8_t RSP_MAC_INFO = 0x85;
 const uint8_t RSP_STATS = 0x86;
+const uint8_t RSP_ED_RESULT = 0x87;
 // The CC2530 appends RSSI with this offset (datasheet): dBm = raw - 73.
 const int16_t RSSI_OFFSET = 73;
 }  // namespace
@@ -309,6 +311,21 @@ bool CC2530Radio::getMacStats(CC2530MacStats& stats) {
   stats.retransmits = (uint16_t)respData_[0] | ((uint16_t)respData_[1] << 8);
   stats.noAck = (uint16_t)respData_[2] | ((uint16_t)respData_[3] << 8);
   return true;
+}
+
+bool CC2530Radio::energyScan(uint8_t channel, int8_t& peakRssi) {
+  uint8_t ch = channel;
+  // ED scan dwells ~tens of ms sampling RSSI; allow margin and retry a couple of
+  // times so a transient (e.g. a burst of RX traffic delaying the reply) is masked.
+  for (uint8_t attempt = 0; attempt < 3; ++attempt) {
+    sendFrame(CMD_ED_SCAN, &ch, 1);
+    if (waitResp(RSP_ED_RESULT, 600) && respLen_ >= 2) {
+      peakRssi = (int8_t)respData_[1];
+      channel_ = channel;  // the module is now tuned to the scanned channel
+      return true;
+    }
+  }
+  return false;
 }
 
 bool CC2530Radio::send(const uint8_t* payload, uint8_t len) {

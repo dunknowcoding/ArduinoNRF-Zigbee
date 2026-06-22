@@ -133,6 +133,15 @@ class CC2530Radio {
   /** Set the raw CC2530 TXPOWER register value. */
   bool setTxPowerRaw(uint8_t txpower);
 
+  /** Energy-Detect scan one channel (CC2530 firmware v0.9+): tune to @p channel,
+      sample the receiver RSSI, and return the PEAK energy (signed, dBm = value-73).
+      This is the IEEE 802.15.4 MLME-SCAN energy-detect primitive the official MAC
+      uses to pick the quietest channel at formation and to detect a jammed channel
+      for frequency agility. Leaves the radio tuned to @p channel; the caller should
+      restore the operating channel (setChannel) after a sweep.
+      @return true on OK; @p peakRssi set to the peak reading. */
+  bool energyScan(uint8_t channel, int8_t& peakRssi);
+
   /** Set/clear the frame-pending bit in outgoing auto-ACKs (CC2530 firmware
       v0.5+, FRMCTRL1.PENDING_OR). A parent sets this while it has frames buffered
       for a sleepy child (ZigbeeIndirectQueue::hasPending) so the child's MAC Data

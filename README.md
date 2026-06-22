@@ -13,7 +13,7 @@
 ![Zigbee](https://img.shields.io/badge/Zigbee-3.0%20%7C%20PRO-e85d04)
 ![Backends](https://img.shields.io/badge/backends-SDCC%20%2B%20Z--Stack%20ZNP-6f42c1)
 ![License](https://img.shields.io/badge/license-Apache--2.0-3fb950)
-![Release](https://img.shields.io/badge/release-v0.13.0-2ea043)
+![Release](https://img.shields.io/badge/release-v0.14.0-2ea043)
 
 The companion to the [ArduinoNRF](https://github.com/dunknowcoding/ArduinoNRF)
 board package, kept as a **separate library** so the board package stays small.
@@ -26,9 +26,10 @@ board package, kept as a **separate library** so the board package stays small.
   once over the debug port by the board package's built-in `CCDebugger`.
 - 🔁 **Two backends, one API** — run the native host stack, or drive a CC2530
   running **TI Z-Stack ZNP** as a certified coprocessor.
-- 📡 **TI-grade MAC reliability** — IEEE 802.15.4 unslotted **CSMA-CA** and
-  **MAC-level ACK + retransmit** in the radio firmware, the same channel-access and
-  per-hop reliability the official Z-Stack MAC uses.
+- 📡 **TI-grade MAC reliability** — IEEE 802.15.4 unslotted **CSMA-CA**,
+  **MAC-level ACK + retransmit**, and **energy-detect scan** in the radio firmware:
+  the same channel-access, per-hop reliability, and channel-sensing the official
+  Z-Stack MAC uses (verified recovering frames under congestion on the bench).
 - 🛠️ **Hardware-proven** — bring-up across up to 5 boards: a 3-hop line, a
   self-healing 2×2 mesh, Green Power, and source-routed delivery.
 

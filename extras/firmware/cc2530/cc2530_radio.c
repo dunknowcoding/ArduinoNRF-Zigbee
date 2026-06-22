@@ -28,7 +28,7 @@
  *     0x84 RX_FRAME [rssi lqi psdu..]
  */
 #define FW_VER_HI 0
-#define FW_VER_LO 8
+#define FW_VER_LO 9
 
 /* ---- SFRs ---- */
 __sfr __at (0xF1) PERCFG;
@@ -92,6 +92,7 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 #define CMD_SET_TX_POWER  0x09
 #define CMD_SET_PENDING   0x0A
 #define CMD_GET_STATS     0x0B
+#define CMD_ED_SCAN       0x0C
 
 #define RSP_RESET_IND     0x80
 #define RSP_PONG          0x81
@@ -100,6 +101,7 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 #define RSP_RX_FRAME      0x84
 #define RSP_MAC_INFO      0x85
 #define RSP_STATS         0x86
+#define RSP_ED_RESULT     0x87
 
 #define MAC_FLAG_FILTER   0x01
 #define MAC_FLAG_AUTOACK  0x02
@@ -210,6 +212,35 @@ static void radio_init(unsigned char ch){
   RFST=STROBE_SRXON;                /* enter RX */
 }
 
+/* Energy Detect scan (IEEE 802.15.4 MLME-SCAN energy-detect): tune to channel
+   `ch`, wait for the RSSI sample to become valid, then sample the receiver RSSI
+   repeatedly and return the PEAK reading (signed dBm-ish, dBm = value - 73). This
+   is the channel-energy primitive the official MAC uses to pick the quietest
+   channel at network formation and to detect a jammed/busy channel for frequency
+   agility - it lets the host SENSE interference rather than only fail on it. RSSI
+   is a passive receiver measurement, so (unlike RFRND) reading it does not disturb
+   the TX path. Leaves the radio tuned to `ch`; the host restores its channel. */
+static signed char ed_scan(unsigned char ch){
+  unsigned int g, d; unsigned char i; signed char peak = (signed char)0x80; /* -128 */
+  radio_init(ch);
+  g=0; while(!(RSSISTAT & RSSISTAT_VALID)){ if(++g==0) break; }  /* await valid */
+  /* Sample the peak over ~a few ms. Spacing chosen so the window spans more than a
+     typical interferer's on/off cycle, so a busy channel reliably reads high. */
+  for(i=0; i<200; i++){
+    signed char r = (signed char)RSSI;
+    if(r > peak) peak = r;
+    /* Periodically drain the RXFIFO so a busy channel cannot overflow it mid-scan
+       (an overflow leaves the radio in an error state that perturbs RSSI/the next
+       command). RSSI is a live register read, unaffected by the flush. */
+    if((i & 0x1Fu) == 0u) RFST=STROBE_SFLUSHRX;
+    for(d=0; d<1200; d++){ }
+  }
+  /* Discard any frames the receiver captured during the scan, so the main loop
+     does not flood the host with RX_FRAMEs (which would stall the next command). */
+  RFST=STROBE_SFLUSHRX;
+  return peak;
+}
+
 /* transmit psdu[len]; radio appends FCS. returns 0 ok / 1 fail / 2 bad len */
 static unsigned char radio_tx_once(__xdata unsigned char* psdu, unsigned char len){
   unsigned int t; unsigned char i, done=0;
@@ -270,12 +301,19 @@ static unsigned char radio_tx(__xdata unsigned char* psdu, unsigned char len,
         if(be<CSMA_MAX_BE) be++;
       }
       if(r!=0){ *attempts=total; return r; }   /* channel-access failure */
+#ifdef MAC_NO_RETRANSMIT
+      /* Comparison build (pre-v0.7 behaviour): CSMA-CA only, return on TXDONE with
+         no MAC-ACK wait or retransmit. Used to measure the MAC-ACK contribution. */
+      (void)want_ack;
+      *attempts=total; return 0;
+#else
       if(!want_ack){ *attempts=total; return 0; }       /* no ACK expected */
       if(wait_for_ack(psdu[2])){
         if(fr>0) mac_retx++;       /* delivered only after >=1 retransmit */
         *attempts=total; return 0;
       }
       /* no ACK -> retransmit the whole frame (outer loop) */
+#endif
     }
     mac_noack++;                   /* exhausted macMaxFrameRetries, never acked */
     *attempts=total; return 1;
@@ -426,6 +464,12 @@ void main(void){
                 tmp[2]=(unsigned char)(mac_noack & 0xFF);
                 tmp[3]=(unsigned char)(mac_noack >> 8);
                 send_frame(RSP_STATS,tmp,4);
+              }
+              else if(cc==CMD_ED_SCAN && ln>=2){
+                signed char e = ed_scan(cmd[1]);
+                tmp[0]=cmd[1];                    /* channel scanned */
+                tmp[1]=(unsigned char)e;          /* peak RSSI (signed; dBm = e-73) */
+                send_frame(RSP_ED_RESULT,tmp,2);
               }
             }
             st=0;

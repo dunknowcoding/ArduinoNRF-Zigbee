@@ -624,7 +624,14 @@ official MAC:
   the association handshake (itself an ack-requested unicast).
 - **v0.8 — MAC reliability counters.** `CMD_GET_STATS` exposes `mac_retx` /
   `mac_noack`, surfaced as `mac[retx noack]` in the example status line, so per-hop
-  delivery is directly observable. Verified readable on air.
+  delivery is directly observable. Verified readable on air; under a co-located
+  jammer the coordinator recovered 93 frames at the MAC layer (87% of all
+  recoveries) at 100% APS delivery - the MAC+APS reliability ZNP relies on.
+- **v0.9 — Energy-Detect scan.** `CMD_ED_SCAN` returns the peak RSSI on a channel
+  (`CC2530Radio::energyScan`, `CC2530_EnergyScan`), the MLME-SCAN energy-detect
+  primitive for quietest-channel formation and frequency agility. Verified on air:
+  reliably flags a jammed channel vs the noise floor. This was the last CC2530 MAC
+  primitive the SDCC firmware lacked relative to ZNP's MAC.
 
 The firmware now carries both halves of TI's MAC reliability story. Two tracks
 remain before a 1.0 stable release:

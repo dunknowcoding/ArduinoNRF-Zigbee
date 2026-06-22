@@ -182,6 +182,36 @@ retransmit; the counters reading nonzero requires a lossy/congested path, which 
 exactly the forced-loss / multi-hop-with-data scenario still outstanding. The
 counters are the instrument that test will read.
 
+### MAC-ACK retransmit recovering frames under congestion
+
+Bench: a coordinator + an end device exchanging acked APS data while a third board
+(`CC2530Congestor`, a local test instrument) floods the channel with CCA-off bursts
+on the same channel - controllable interference that a co-located CCA bench does not
+produce on its own. Under that congestion the v0.8/v0.9 firmware's MAC-ACK
+retransmit fired and **recovered** frames, holding 100% APS delivery:
+
+- end `aps[ok=295 rtx=9 drop=0]` `mac[retx=5 noack=0]`
+- coordinator (heavier interference window) `aps[ok=464 rtx=14 drop=0]`
+  `mac[retx=93 noack=0]`
+
+On the coordinator the **MAC layer recovered 93 of 107 total recoveries (87%)** -
+fast in-firmware retransmits carrying the load that would otherwise fall to the
+slower host APS retransmit or be dropped - with **zero** APS drops and `noack=0`
+(every retransmit eventually succeeded). This is the two-layer MAC+APS reliability
+TI's ZNP relies on, now observed working on our SDCC firmware under real
+interference. (A clean no-retransmit-vs-MAC-ACK *delivery* contrast at matched
+join conditions was not isolated: under the heaviest CCA-off jamming neither build
+could complete the join handshake, so that pairing is inconclusive; the recovery
+evidence above stands on its own.)
+
+### CC2530 firmware v0.9: Energy-Detect scan
+
+`CC2530_EnergyScan` sweeps channels 11-26 via `CC2530Radio::energyScan()` (firmware
+`ED_SCAN`). Against the co-located CCA-off jammer the scan reliably distinguished
+the jammed channel (~-23 dBm peak), ambient 2.4 GHz Wi-Fi on the low channels
+(~-27 to -36 dBm), and quiet channels (~-78 dBm noise floor) - the channel-energy
+sensing the official MAC uses for quietest-channel formation and frequency agility.
+
 ## Two boards (board1 + board2)
 
 - `CC2530_Link` shows `TX "hello N" ok` and reciprocal `RX (... dBm): hello N`

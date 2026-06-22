@@ -63,6 +63,20 @@ direct evidence that the MAC recovered a frame the channel dropped, which is the
 reliability ZNP provides and our pre-v0.7 firmware did not. Pure instrumentation;
 no change to the TX/RX behavior.
 
+Firmware v0.9 adds `ED_SCAN` (0x0C): an IEEE 802.15.4 **Energy-Detect scan**. The
+host names a channel; the firmware tunes the receiver, samples the RSSI across a
+short dwell, and returns the **peak** energy (signed; dBm = value - 73). This is the
+MLME-SCAN energy-detect primitive the official MAC uses to (a) pick the quietest
+channel when a coordinator forms a network and (b) detect a jammed/busy channel for
+frequency agility - it lets the host *sense* interference rather than only fail on
+it. Exposed by `CC2530Radio::energyScan()` and demonstrated by `CC2530_EnergyScan`.
+On-air verified: against a co-located CCA-off jammer, the jammed channel reads
+~-23 dBm while quiet channels sit near the -78 dBm noise floor.
+
+A compile-time flag `MAC_NO_RETRANSMIT` (off by default) builds the CCA TX path
+without the v0.7 ACK-wait/retransmit (pre-v0.7 behaviour). It is a bench comparison
+aid for measuring the MAC-ACK contribution; the shipped binary never defines it.
+
 ## UART protocol
 
 ```
@@ -81,6 +95,8 @@ Host -> CC2530:  FE  LEN  CMD  [DATA..]  FCS        (FCS = XOR of LEN..DATA)
   0x09 SET_TX_POWER [raw]      -> 0x82 OK
   0x0A SET_PENDING [0|1]       -> 0x82 OK   (force frame-pending in auto-ACKs)
   0x0B GET_STATS               -> 0x86 STATS [retx_lo retx_hi noack_lo noack_hi]
+  0x0C ED_SCAN [channel]       -> 0x87 ED_RESULT [channel peak_rssi]
+       peak_rssi signed; dBm = peak_rssi - 73. Leaves the radio on [channel].
 
 CC2530 -> Host (asynchronous):
   0x80 RESET_IND [ver_hi ver_lo]      (sent once at boot)
