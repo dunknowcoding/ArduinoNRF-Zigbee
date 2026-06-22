@@ -19,6 +19,7 @@ const uint8_t CMD_SET_TX_POWER = 0x09;
 const uint8_t CMD_SET_PENDING = 0x0A;
 const uint8_t CMD_GET_STATS = 0x0B;
 const uint8_t CMD_ED_SCAN = 0x0C;
+const uint8_t CMD_SET_MAC_PIB = 0x0D;
 // module -> host
 const uint8_t RSP_RESET_IND = 0x80;
 const uint8_t RSP_PONG = 0x81;
@@ -311,6 +312,13 @@ bool CC2530Radio::getMacStats(CC2530MacStats& stats) {
   stats.retransmits = (uint16_t)respData_[0] | ((uint16_t)respData_[1] << 8);
   stats.noAck = (uint16_t)respData_[2] | ((uint16_t)respData_[3] << 8);
   return true;
+}
+
+bool CC2530Radio::setMacPib(uint8_t minBE, uint8_t maxBE, uint8_t maxBackoffs,
+                            uint8_t maxFrameRetries) {
+  uint8_t d[4] = {minBE, maxBE, maxBackoffs, maxFrameRetries};
+  sendFrame(CMD_SET_MAC_PIB, d, 4);
+  return waitResp(RSP_OK, 300);
 }
 
 bool CC2530Radio::energyScan(uint8_t channel, int8_t& peakRssi) {

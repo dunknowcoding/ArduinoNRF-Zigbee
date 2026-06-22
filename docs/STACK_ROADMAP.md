@@ -632,6 +632,11 @@ official MAC:
   primitive for quietest-channel formation and frequency agility. Verified on air:
   reliably flags a jammed channel vs the noise floor. This was the last CC2530 MAC
   primitive the SDCC firmware lacked relative to ZNP's MAC.
+- **v0.10 — runtime-tunable MAC PIB.** `CMD_SET_MAC_PIB` makes `macMinBE` /
+  `macMaxBE` / `macMaxCSMABackoffs` / `macMaxFrameRetries` settable at runtime
+  (`CC2530Radio::setMacPib`), like ZNP's MAC PIB attributes, so the host can trade
+  reliability against latency or adapt the backoff window to congestion
+  (`macMaxFrameRetries=0` disables retransmit at runtime). Build-verified.
 
 The firmware now carries both halves of TI's MAC reliability story. Two tracks
 remain before a 1.0 stable release:

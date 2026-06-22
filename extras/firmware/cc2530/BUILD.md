@@ -73,6 +73,14 @@ it. Exposed by `CC2530Radio::energyScan()` and demonstrated by `CC2530_EnergySca
 On-air verified: against a co-located CCA-off jammer, the jammed channel reads
 ~-23 dBm while quiet channels sit near the -78 dBm noise floor.
 
+Firmware v0.10 adds `SET_MAC_PIB` (0x0D): the host can tune the MAC PIB at runtime -
+`macMinBE` / `macMaxBE` (CSMA backoff-exponent window), `macMaxCSMABackoffs`, and
+`macMaxFrameRetries` - exactly like ZNP's settable MAC attributes, so the host can
+trade reliability against latency or widen the backoff window under congestion
+(defaults remain the 802.15.4 values 3/5/4/3). `macMaxFrameRetries = 0` disables
+the v0.7 retransmit at runtime (the runtime equivalent of the `MAC_NO_RETRANSMIT`
+build flag). Exposed by `CC2530Radio::setMacPib()`.
+
 A compile-time flag `MAC_NO_RETRANSMIT` (off by default) builds the CCA TX path
 without the v0.7 ACK-wait/retransmit (pre-v0.7 behaviour). It is a bench comparison
 aid for measuring the MAC-ACK contribution; the shipped binary never defines it.
@@ -97,6 +105,8 @@ Host -> CC2530:  FE  LEN  CMD  [DATA..]  FCS        (FCS = XOR of LEN..DATA)
   0x0B GET_STATS               -> 0x86 STATS [retx_lo retx_hi noack_lo noack_hi]
   0x0C ED_SCAN [channel]       -> 0x87 ED_RESULT [channel peak_rssi]
        peak_rssi signed; dBm = peak_rssi - 73. Leaves the radio on [channel].
+  0x0D SET_MAC_PIB [minBE maxBE maxBackoffs maxFrameRetries] -> 0x82 OK
+       runtime CSMA/retransmit tuning; maxFrameRetries 0 disables MAC-ACK retransmit
 
 CC2530 -> Host (asynchronous):
   0x80 RESET_IND [ver_hi ver_lo]      (sent once at boot)

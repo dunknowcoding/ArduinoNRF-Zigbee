@@ -28,7 +28,7 @@
  *     0x84 RX_FRAME [rssi lqi psdu..]
  */
 #define FW_VER_HI 0
-#define FW_VER_LO 9
+#define FW_VER_LO 10
 
 /* ---- SFRs ---- */
 __sfr __at (0xF1) PERCFG;
@@ -93,6 +93,7 @@ __xdata __at (0x61FA) volatile unsigned char TXFILTCFG;
 #define CMD_SET_PENDING   0x0A
 #define CMD_GET_STATS     0x0B
 #define CMD_ED_SCAN       0x0C
+#define CMD_SET_MAC_PIB   0x0D
 
 #define RSP_RESET_IND     0x80
 #define RSP_PONG          0x81
@@ -165,6 +166,13 @@ static unsigned int rng_state = 0xACE1u;   /* CSMA backoff PRNG (software, no ra
    mac_noack = unicasts that exhausted macMaxFrameRetries with no ACK. */
 static unsigned int mac_retx = 0;
 static unsigned int mac_noack = 0;
+/* Runtime-tunable MAC PIB (defaults = the 802.15.4 values above; settable by the
+   host via CMD_SET_MAC_PIB, like ZNP's MAC PIB attributes) so the host can trade
+   reliability against latency / adapt the backoff window to congestion. */
+static unsigned char cfg_min_be      = CSMA_MIN_BE;
+static unsigned char cfg_max_be      = CSMA_MAX_BE;
+static unsigned char cfg_max_backoffs = CSMA_MAX_BACKOFFS;
+static unsigned char cfg_max_retries = MAC_MAX_FRAME_RETRIES;
 static unsigned char wait_for_ack(unsigned char dsn);  /* defined after radio_rx */
 
 static void clock_init(void){
@@ -278,7 +286,7 @@ static void backoff_delay(unsigned char periods){
 
 static unsigned char radio_tx(__xdata unsigned char* psdu, unsigned char len,
                               unsigned char retries, unsigned char* attempts){
-  unsigned char r=1, i, be=CSMA_MIN_BE, max_attempts;
+  unsigned char r=1, i, be=cfg_min_be, max_attempts;
   if(len>125){ *attempts=0; return 2; }
   /* CSMA-CA: radio_tx_once() already does the hardware CCA+TX (STXONCCA, the
      proven v0.5 path) and returns nonzero when the channel was busy. So just add
@@ -291,14 +299,14 @@ static unsigned char radio_tx(__xdata unsigned char* psdu, unsigned char len,
     unsigned char fr, want_ack=(unsigned char)(psdu[0] & FCF_ACK_REQUEST), total=0;
     /* macMaxFrameRetries: each pass runs the full CSMA-CA, transmits, then (if the
        frame requested an ACK) waits for it; on no-ACK the whole frame is retried. */
-    for(fr=0; fr<=MAC_MAX_FRAME_RETRIES; fr++){
-      be=CSMA_MIN_BE;
-      for(i=0; i<=CSMA_MAX_BACKOFFS; i++){
+    for(fr=0; fr<=cfg_max_retries; fr++){
+      be=cfg_min_be;
+      for(i=0; i<=cfg_max_backoffs; i++){
         r=radio_tx_once(psdu,len);
         if(++total==0) total=255;
         if(r==0) break;            /* got the channel + TXDONE */
         backoff_delay((unsigned char)(rng_byte() & (unsigned char)((1u<<be)-1u)));
-        if(be<CSMA_MAX_BE) be++;
+        if(be<cfg_max_be) be++;
       }
       if(r!=0){ *attempts=total; return r; }   /* channel-access failure */
 #ifdef MAC_NO_RETRANSMIT
@@ -470,6 +478,14 @@ void main(void){
                 tmp[0]=cmd[1];                    /* channel scanned */
                 tmp[1]=(unsigned char)e;          /* peak RSSI (signed; dBm = e-73) */
                 send_frame(RSP_ED_RESULT,tmp,2);
+              }
+              else if(cc==CMD_SET_MAC_PIB && ln>=5){
+                /* [minBE maxBE maxBackoffs maxFrameRetries], bounded to sane ranges */
+                unsigned char a=cmd[1], b=cmd[2], k=cmd[3], rt=cmd[4];
+                if(b>8) b=8; if(a>b) a=b;
+                if(k>8) k=8; if(rt>7) rt=7;
+                cfg_min_be=a; cfg_max_be=b; cfg_max_backoffs=k; cfg_max_retries=rt;
+                send_frame(RSP_OK,tmp,0);
               }
             }
             st=0;

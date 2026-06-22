@@ -133,6 +133,15 @@ class CC2530Radio {
   /** Set the raw CC2530 TXPOWER register value. */
   bool setTxPowerRaw(uint8_t txpower);
 
+  /** Tune the runtime MAC PIB (CC2530 firmware v0.10+), like ZNP's settable MAC
+      attributes, to trade reliability against latency or adapt to congestion:
+      @p minBE/@p maxBE the CSMA-CA backoff-exponent window (<=8), @p maxBackoffs
+      CSMA backoffs per attempt (<=8), @p maxFrameRetries MAC-ACK retransmits (<=7;
+      0 disables retransmit). Defaults are the 802.15.4 values (3/5/4/3).
+      @return true on OK. */
+  bool setMacPib(uint8_t minBE, uint8_t maxBE, uint8_t maxBackoffs,
+                 uint8_t maxFrameRetries);
+
   /** Energy-Detect scan one channel (CC2530 firmware v0.9+): tune to @p channel,
       sample the receiver RSSI, and return the PEAK energy (signed, dBm = value-73).
       This is the IEEE 802.15.4 MLME-SCAN energy-detect primitive the official MAC
