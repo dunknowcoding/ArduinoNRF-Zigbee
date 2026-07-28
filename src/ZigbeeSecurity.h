@@ -31,7 +31,8 @@ struct ZigbeeSecurityStats {
   uint32_t secured;      ///< frames encrypted for transmit
   uint32_t opened;       ///< frames verified + decrypted
   uint32_t micFailures;  ///< frames dropped: MIC mismatch / malformed aux
-  uint32_t replays;      ///< frames dropped: stale frame counter
+  uint32_t duplicates;   ///< authenticated duplicates at the last counter
+  uint32_t replays;      ///< authenticated frames below the last counter
 };
 
 class ZigbeeSecurity {
@@ -82,6 +83,13 @@ class ZigbeeSecurity {
 
   const ZigbeeSecurityStats& stats() const { return stats_; }
   void resetReplayTable();
+  /** Forget replay state only for @p ieee.
+
+      Use this after a known child has been accepted for reassociation and may
+      have restarted its persisted frame-counter reservation. Other peers keep
+      their replay high-water marks; a new/unknown association must not call
+      this method. */
+  void resetReplayPeer(uint64_t ieee);
 
  private:
   struct ReplayEntry {
@@ -100,7 +108,13 @@ class ZigbeeSecurity {
   ZigbeeSecurityStats stats_;
   ReplayEntry replay_[kMaxReplayPeers];
 
-  bool replayCheckAndUpdate(uint64_t ieee, uint8_t keySeq, uint32_t counter);
+  enum ReplayResult : uint8_t {
+    REPLAY_FRESH = 0,
+    REPLAY_DUPLICATE = 1,
+    REPLAY_STALE = 2
+  };
+  ReplayResult replayCheckAndUpdate(uint64_t ieee, uint8_t keySeq,
+                                    uint32_t counter);
 
   // CCM* core (M=4, L=2) on the hardware AES block.
   bool ccmStar(bool encrypt, const uint8_t nonce[13], const uint8_t* aad,

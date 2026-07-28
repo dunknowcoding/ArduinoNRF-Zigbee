@@ -104,8 +104,16 @@ void ZigbeeSecurity::resetReplayTable() {
   for (uint8_t i = 0; i < kMaxReplayPeers; ++i) replay_[i] = ReplayEntry();
 }
 
-bool ZigbeeSecurity::replayCheckAndUpdate(uint64_t ieee, uint8_t keySeq,
-                                          uint32_t counter) {
+void ZigbeeSecurity::resetReplayPeer(uint64_t ieee) {
+  for (uint8_t i = 0; i < kMaxReplayPeers; ++i) {
+    if (replay_[i].used && replay_[i].ieee == ieee) {
+      replay_[i] = ReplayEntry();
+    }
+  }
+}
+
+ZigbeeSecurity::ReplayResult ZigbeeSecurity::replayCheckAndUpdate(
+    uint64_t ieee, uint8_t keySeq, uint32_t counter) {
   // The replay identity is (source IEEE, key sequence). Frame counters restart
   // when the network key is rotated, so a frame under a freshly installed key
   // gets its own entry and a low counter is accepted as fresh - rather than
@@ -114,9 +122,13 @@ bool ZigbeeSecurity::replayCheckAndUpdate(uint64_t ieee, uint8_t keySeq,
   for (uint8_t i = 0; i < kMaxReplayPeers; ++i) {
     if (replay_[i].used && replay_[i].ieee == ieee &&
         replay_[i].keySeq == keySeq) {
-      if (counter <= replay_[i].lastCounter) return false;
+      // A sender can repeat the exact secured frame when its MAC ACK is lost.
+      // It is still rejected, but it is a link duplicate rather than evidence
+      // that the sender's monotonic counter moved backwards.
+      if (counter == replay_[i].lastCounter) return REPLAY_DUPLICATE;
+      if (counter < replay_[i].lastCounter) return REPLAY_STALE;
       replay_[i].lastCounter = counter;
-      return true;
+      return REPLAY_FRESH;
     }
     if (!slot && !replay_[i].used) slot = &replay_[i];
   }
@@ -131,7 +143,7 @@ bool ZigbeeSecurity::replayCheckAndUpdate(uint64_t ieee, uint8_t keySeq,
   slot->ieee = ieee;
   slot->keySeq = keySeq;
   slot->lastCounter = counter;
-  return true;
+  return REPLAY_FRESH;
 }
 
 // ---------------------------------------------------------------- CCM* core
@@ -282,7 +294,13 @@ uint8_t ZigbeeSecurity::openNpdu(const uint8_t* npdu, uint8_t npduLen,
     return 0;
   }
 
-  if (!replayCheckAndUpdate(srcIeee, auxKeySeq, frameCounter)) {
+  const ReplayResult replay =
+      replayCheckAndUpdate(srcIeee, auxKeySeq, frameCounter);
+  if (replay == REPLAY_DUPLICATE) {
+    ++stats_.duplicates;
+    return 0;
+  }
+  if (replay == REPLAY_STALE) {
     ++stats_.replays;
     return 0;
   }

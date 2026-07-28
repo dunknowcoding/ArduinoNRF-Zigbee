@@ -440,9 +440,22 @@ void onMacCommand(const MacCommandFrame& frame, int8_t rssi, uint8_t lqi) {
     MacAssociationRequest request;
     if (!ZigbeeMac::parseAssociationRequest(frame, request)) return;
 
+    // A known child can legitimately restart inside its reserved outgoing
+    // frame-counter window. Remember that this is a reassociation before the
+    // network layer refreshes the neighbor entry below. New identities do not
+    // get this exception.
+    const ZigbeeNeighbor* priorChild = neighbors.findByIeee(frame.srcIeee);
+    const bool isReassociation =
+        priorChild &&
+        (priorChild->relationship == ZB_REL_CHILD ||
+         priorChild->relationship == ZB_REL_PREVIOUS_CHILD);
     ZigbeeAssociationDecision decision =
         network.handleAssociationRequest(frame.srcIeee, request, lqi & 0x7F);
-    if (decision.accepted) security.resetReplayTable();
+    if (decision.accepted && isReassociation) {
+      // Reset only this network identity. Clearing the entire table here would
+      // silently weaken replay protection for unrelated peers.
+      security.resetReplayPeer(frame.srcIeee);
+    }
 #if NIUS_ZIGBEE_SECURE_JOIN
     // Trust Center: schedule delivery of the network key to this joiner. A
     // short delay lets the joiner finish setting its MAC address filter so the
@@ -1375,8 +1388,17 @@ void onZdoFrame(const MacDataFrame& mac, const NwkDataFrame& nwk,
   if (aps.clusterId == ZDO_DEVICE_ANNCE && IS_PARENT_CAPABLE) {
     ZdoDeviceAnnounce announce;
     if (!ZigbeeZdo::parseDeviceAnnounce(aps.payload, aps.payloadLen, announce)) return;
-    neighbors.upsert(announce.nwkAddress, announce.ieeeAddress, ZB_DEVICE_ROUTER,
-                     ZB_REL_CHILD, network.info().depth + 1, lqi & 0x7F, true, false);
+    // Device_annce is network-wide, not proof of a one-hop parent/child
+    // relationship. Refresh an association we already own, but do not insert a
+    // relayed grandchild as our child (that polluted leases and link status).
+    ZigbeeNeighbor* announced = neighbors.findByIeee(announce.ieeeAddress);
+    if (announced &&
+        (announced->relationship == ZB_REL_CHILD ||
+         announced->relationship == ZB_REL_PREVIOUS_CHILD)) {
+      neighbors.upsert(announce.nwkAddress, announce.ieeeAddress,
+                       announced->deviceType, ZB_REL_CHILD, announced->depth,
+                       lqi & 0x7F, announced->rxOnWhenIdle, false);
+    }
     Serial.print("ZDO Device_annce nwk=0x"); printHex16(announce.nwkAddress);
     Serial.print(" ieee=0x"); printHex64(announce.ieeeAddress);
     Serial.print(" src=0x"); printHex16(nwk.srcShort);
@@ -1646,6 +1668,7 @@ void loop() {
     Serial.print(" sec[tx="); Serial.print(security.stats().secured);
     Serial.print(" rx="); Serial.print(security.stats().opened);
     Serial.print(" mic="); Serial.print(security.stats().micFailures);
+    Serial.print(" dup="); Serial.print(security.stats().duplicates);
     Serial.print(" rpl="); Serial.print(security.stats().replays);
     Serial.print("]");
     if (IS_PARENT_CAPABLE) {

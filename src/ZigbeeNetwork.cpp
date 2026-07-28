@@ -72,7 +72,15 @@ uint16_t ZigbeeAddressAllocator::allocate(const ZigbeeNeighborTable& neighbors) 
   uint16_t candidate = nextCandidate_;
   uint16_t span = (uint16_t)(lastAddress_ - firstAddress_ + 1);
   for (uint16_t i = 0; i < span; ++i) {
-    if (isInPool(candidate) && !neighbors.findByNwk(candidate)) {
+    const ZigbeeNeighbor* occupant = neighbors.findByNwk(candidate);
+    // Link Status can teach us a short-address-only sibling before that
+    // device associates. Such an IEEE-unknown observation is not an address
+    // lease owned by this parent and must not consume its child pool.
+    const bool allocatedChild =
+        occupant && occupant->ieeeAddress != 0 &&
+        (occupant->relationship == ZB_REL_CHILD ||
+         occupant->relationship == ZB_REL_PREVIOUS_CHILD);
+    if (isInPool(candidate) && !allocatedChild) {
       nextCandidate_ = advance(candidate);
       return candidate;
     }
@@ -384,6 +392,7 @@ uint8_t ZigbeeNetwork::collectLinkStatusEntries(NwkLinkStatusEntry* entries,
   for (uint8_t i = 0; i < neighbors_->capacity() && n < maxEntries; ++i) {
     const ZigbeeNeighbor* neighbor = neighbors_->slot(i);
     if (!neighbor || !neighbor->used) continue;
+    if (neighbor->relationship == ZB_REL_PREVIOUS_CHILD) continue;
     if (neighbor->deviceType != ZB_DEVICE_ROUTER &&
         neighbor->deviceType != ZB_DEVICE_COORDINATOR) {
       continue;

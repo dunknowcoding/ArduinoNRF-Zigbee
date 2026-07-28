@@ -70,9 +70,10 @@ class ZigbeeNeighborTable {
   bool removeByNwk(uint16_t nwkAddress);
   uint8_t removeOlderThan(uint32_t cutoffMs);
 
-  /** Remove router/coordinator neighbors (except @p spareAddress, normally
-      the parent) whose lastSeenMs is older than @p cutoffMs. Used by the
-      Link Status aging protocol. @return number of entries removed. */
+  /** Age router/coordinator neighbors (except @p spareAddress, normally the
+      parent) whose lastSeenMs is older than @p cutoffMs. Stale children become
+      bounded PREVIOUS_CHILD address leases so reassociation can reuse their
+      short address; stale non-children are removed. @return entries aged. */
   uint8_t removeStaleRouters(uint32_t cutoffMs,
                              uint16_t spareAddress = 0xFFFF);
 

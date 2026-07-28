@@ -113,7 +113,24 @@ uint8_t ZigbeeNeighborTable::removeStaleRouters(uint32_t cutoffMs,
       continue;
     }
     if (n.lastSeenMs < cutoffMs) {
-      n = ZigbeeNeighbor();
+      // A previous-child entry is an address lease, not a live neighbor.
+      // Keep it until normal table-pressure LRU replacement reclaims the
+      // slot; repeatedly aging the table must not erase it one pass later.
+      if (n.relationship == ZB_REL_PREVIOUS_CHILD) {
+        continue;
+      }
+      // Keep a bounded previous-child lease so the same IEEE address gets the
+      // same short address after a transient outage. The table's normal LRU
+      // replacement reclaims the lease if capacity is needed by another peer.
+      // Siblings are not our address-allocation responsibility and are removed.
+      if (n.relationship == ZB_REL_CHILD && n.ieeeAddress != 0) {
+        n.relationship = ZB_REL_PREVIOUS_CHILD;
+        n.incomingCost = 0;
+        n.outgoingCost = 0;
+        n.permitJoining = false;
+      } else {
+        n = ZigbeeNeighbor();
+      }
       ++removed;
     }
   }

@@ -351,6 +351,7 @@ class CC2530Radio {
   uint8_t apsCounter_;
   uint8_t zclSequence_;
   uint8_t lastTxAttempts_;
+  uint16_t localShortAddress_;
   ZigbeeSecurity* security_;
   uint64_t securityIeee_;
   uint32_t securityCounter_;

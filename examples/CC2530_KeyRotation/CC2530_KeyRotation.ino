@@ -118,9 +118,20 @@ void testPostRekeyResync() {
         "low counter under the new key is accepted (per-key-seq resync)");
   check(sec.stats().replays == replaysBefore, "no replay drop across the rekey");
 
-  // A genuine replay under the new key is still rejected.
-  check(!opensTo(sec, fB, fBn), "replay of the new-key frame still rejected");
-  check(sec.stats().replays == replaysBefore + 1, "the real replay is counted");
+  // An equal-counter MAC retransmission is rejected and reported separately
+  // from a counter rollback. Both are non-deliverable.
+  uint32_t duplicatesBefore = sec.stats().duplicates;
+  check(!opensTo(sec, fB, fBn), "duplicate new-key frame still rejected");
+  check(sec.stats().duplicates == duplicatesBefore + 1,
+        "equal-counter duplicate is counted");
+  check(sec.stats().replays == replaysBefore,
+        "equal-counter duplicate is not a counter rollback");
+
+  uint8_t stale[64];
+  uint8_t staleLen = secure(sec, 0, stale, sizeof(stale));
+  check(!opensTo(sec, stale, staleLen), "lower counter is rejected");
+  check(sec.stats().replays == replaysBefore + 1,
+        "lower-counter replay is counted");
 }
 
 void setup() {

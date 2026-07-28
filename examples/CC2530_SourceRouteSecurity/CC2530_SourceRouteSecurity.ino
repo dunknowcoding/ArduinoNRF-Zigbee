@@ -141,6 +141,25 @@ void setup() {
   check(sec.openNpdu(tampered, securedLen, kHeaderLen, opened, sizeof(opened)) == 0,
         "replay of same counter rejected");
 
+  // Reassociation recovery must clear only the restarted peer. A second
+  // sender's high-water mark remains protected.
+  const uint64_t otherIeee = 0x00124B00000000A2ULL;
+  uint8_t otherSecured[96];
+  uint8_t otherSecuredLen =
+      sec.secureNpdu(plain, plainLen, kHeaderLen, otherIeee, 40,
+                     otherSecured, sizeof(otherSecured));
+  check(otherSecuredLen > 0, "second peer secures");
+  check(sec.openNpdu(otherSecured, otherSecuredLen, kHeaderLen,
+                     opened, sizeof(opened)) > 0,
+        "second peer first open accepted");
+  sec.resetReplayPeer(kIeeeA);
+  check(sec.openNpdu(tampered, securedLen, kHeaderLen,
+                     opened, sizeof(opened)) > 0,
+        "peer reset accepts restarted counter");
+  check(sec.openNpdu(otherSecured, otherSecuredLen, kHeaderLen,
+                     opened, sizeof(opened)) == 0,
+        "peer reset preserves other replay state");
+
   Serial.println("-------------------------------------------------");
   Serial.print("RESULT: ");
   Serial.print(passes);

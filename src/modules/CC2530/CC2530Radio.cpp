@@ -41,7 +41,7 @@ CC2530Radio::CC2530Radio(HardwareSerial& serial)
       apsAckCb_(nullptr),
       version_(0), channel_(11),
       macSequence_(0), nwkSequence_(0), apsCounter_(0), zclSequence_(0),
-      lastTxAttempts_(0),
+      lastTxAttempts_(0), localShortAddress_(ZigbeeMac::kBroadcastShort),
       state_(0), len_(0), idx_(0), fcs_(0),
       respCmd_(0), respLen_(0), respReady_(false) {}
 
@@ -126,32 +126,46 @@ void CC2530Radio::feed(uint8_t b) {
                   if (nwkCb_) {
                     nwkCb_(frame, nwk, rssi, lqi);
                   }
-                  // APS ACK frames have their own frame type; branch before
-                  // the data-frame parse (which rejects non-data types).
-                  if (apsAckCb_ &&
-                      ZigbeeAps::frameType(nwk.payload, nwk.payloadLen) ==
-                          APS_FRAME_ACK) {
-                    ApsAckFrame ack;
-                    if (ZigbeeAps::parseAckFrame(nwk.payload, nwk.payloadLen,
-                                                 ack)) {
-                      apsAckCb_(frame, nwk, ack, rssi, lqi);
+                  // Every router receives unicast NPDUs whose MAC destination
+                  // is the next hop, but only the final NWK destination may
+                  // dispatch their APS/ZDO/ZCL payload. Broadcast NPDUs remain
+                  // locally consumable (including group-addressed APS data).
+                  // Without this gate, a relay incorrectly acts as the APS
+                  // endpoint and can emit duplicate end-to-end acknowledgments.
+                  const bool localNwkDestination =
+                      nwk.dstShort == localShortAddress_ ||
+                      nwk.dstShort >= 0xFFF8;
+                  if (localNwkDestination) {
+                    // APS ACK frames have their own frame type; branch before
+                    // the data-frame parse (which rejects non-data types).
+                    if (apsAckCb_ &&
+                        ZigbeeAps::frameType(nwk.payload, nwk.payloadLen) ==
+                            APS_FRAME_ACK) {
+                      ApsAckFrame ack;
+                      if (ZigbeeAps::parseAckFrame(nwk.payload, nwk.payloadLen,
+                                                   ack)) {
+                        apsAckCb_(frame, nwk, ack, rssi, lqi);
+                      }
                     }
-                  }
-                  if (apsCb_ || zdoCb_ || zclCb_) {
-                    ApsDataFrame aps;
-                    if (ZigbeeAps::parseDataFrame(nwk.payload, nwk.payloadLen, aps)) {
-                      if (apsCb_) {
-                        apsCb_(frame, nwk, aps, rssi, lqi);
-                      }
-                      if (zdoCb_ &&
-                          aps.profileId == ZigbeeAps::kProfileZigbeeDevice &&
-                          aps.dstEndpoint == ZigbeeZdo::kEndpoint) {
-                        zdoCb_(frame, nwk, aps, rssi, lqi);
-                      }
-                      if (zclCb_) {
-                        ZclFrame zcl;
-                        if (ZigbeeZcl::parseFrame(aps.payload, aps.payloadLen, zcl)) {
-                          zclCb_(frame, nwk, aps, zcl, rssi, lqi);
+                    if (apsCb_ || zdoCb_ || zclCb_) {
+                      ApsDataFrame aps;
+                      if (ZigbeeAps::parseDataFrame(nwk.payload, nwk.payloadLen,
+                                                    aps)) {
+                        if (apsCb_) {
+                          apsCb_(frame, nwk, aps, rssi, lqi);
+                        }
+                        if (zdoCb_ &&
+                            aps.profileId ==
+                                ZigbeeAps::kProfileZigbeeDevice &&
+                            aps.dstEndpoint == ZigbeeZdo::kEndpoint) {
+                          zdoCb_(frame, nwk, aps, rssi, lqi);
+                        }
+                        if (zclCb_) {
+                          ZclFrame zcl;
+                          if (ZigbeeZcl::parseFrame(
+                                  aps.payload, aps.payloadLen, zcl)) {
+                            zclCb_(frame, nwk, aps, zcl, rssi, lqi);
+                          }
                         }
                       }
                     }
@@ -266,7 +280,9 @@ bool CC2530Radio::setAddress(uint16_t panId, uint16_t shortAddress,
   d[3] = (uint8_t)(shortAddress >> 8);
   for (uint8_t i = 0; i < 8; ++i) d[4 + i] = ieeeAddress ? ieeeAddress[i] : 0;
   sendFrame(CMD_SET_ADDR, d, sizeof(d));
-  return waitResp(RSP_OK, 300);
+  const bool ok = waitResp(RSP_OK, 300);
+  if (ok) localShortAddress_ = shortAddress;
+  return ok;
 }
 
 bool CC2530Radio::configureMac(uint8_t flags, uint8_t retries) {
